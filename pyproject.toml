@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rifflux"
+version = "0.1.0"
+description = "Local/offline hybrid retrieval with MCP tools"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp[cli]>=1.13.0",
+  "mistune>=3.0.2",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+vector = ["sqlite-vec>=0.1.6"]
+onnx = ["fastembed>=0.3.6"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+rifflux-mcp = "rifflux.mcp.server:main"
+rifflux-reindex = "rifflux.cli:reindex_main"
+rifflux-query = "rifflux.cli:query_main"
+rifflux-rebuild = "rifflux.cli:rebuild_main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
