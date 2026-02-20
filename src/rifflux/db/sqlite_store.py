@@ -34,6 +34,11 @@ class SqliteStore:
         )
         return cur.fetchone()
 
+    def get_all_file_meta(self) -> dict[str, dict[str, Any]]:
+        """Return {path: {id, mtime_ns, size_bytes, sha256}} for all indexed files."""
+        cur = self.conn.execute("SELECT id, path, mtime_ns, size_bytes, sha256 FROM files")
+        return {row["path"]: dict(row) for row in cur.fetchall()}
+
     def upsert_file(self, path: str, mtime_ns: int, size_bytes: int, sha256: str) -> int:
         self.conn.execute(
             """

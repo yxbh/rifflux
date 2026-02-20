@@ -159,6 +159,40 @@ Rifflux MCP tools expose descriptions and argument metadata so clients (includin
    - `prune_missing`: optional boolean stale-file prune toggle (default `true`)
    - response includes `deleted_files` and `git_fingerprint`
 
+## Debug logging
+
+Rifflux emits structured debug logs via Python `logging` under these loggers:
+
+- `rifflux.mcp.tools` — tool call entry/exit with wall-clock timing, embedder resolution, schema init
+- `rifflux.indexing` — file scan counts, per-file skip/index decisions, chunk+embed timing
+- `rifflux.retrieval` — lexical/semantic/embed phase durations and hit counts
+
+Set `RIFLUX_LOG_LEVEL` to control verbosity:
+
+- `RIFLUX_LOG_LEVEL=DEBUG` — full timing and decision traces (recommended for diagnosing slow tool calls)
+- `RIFLUX_LOG_LEVEL=INFO` — high-level summaries only
+- `RIFLUX_LOG_LEVEL=WARNING` — default, silent unless something is wrong
+
+Example output at `DEBUG` level:
+
+```
+10:42:01 rifflux.mcp.tools DEBUG search_rifflux start query='cache ttl' top_k=3 mode=hybrid
+10:42:01 rifflux.retrieval DEBUG search phases: lexical=0.001s (2 hits) embed=0.000s semantic=0.003s (5 hits)
+10:42:01 rifflux.mcp.tools DEBUG search_rifflux done in 0.005s count=3
+```
+
+For VS Code MCP server usage, add to `.vscode/mcp.json` env:
+
+```json
+"RIFLUX_LOG_LEVEL": "DEBUG"
+```
+
+For CLI usage:
+
+```bash
+RIFLUX_LOG_LEVEL=DEBUG rifflux-query "cache ttl" --mode hybrid
+```
+
 ## Troubleshooting
 
 - If search or reindex fails with SQL errors like `no such column: vec` or FTS mismatch errors, rebuild the DB schema and reindex:

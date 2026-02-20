@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import subprocess
 import threading
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from rifflux.config import RiffluxConfig
+
+logger = logging.getLogger("rifflux.mcp.tools")
 from rifflux.db.sqlite_store import SqliteStore
 from rifflux.embeddings.embedder_factory import EmbedderBundle, resolve_embedder
 from rifflux.indexing.indexer import Indexer
@@ -16,9 +19,11 @@ from rifflux.retrieval.search import SearchService
 
 
 _LAST_AUTO_REINDEX_MONOTONIC: dict[str, float] = {}
+_last_reindex_thread: threading.Thread | None = None
 
 # Thread-safe caches to avoid repeated expensive init on parallel tool calls.
 _init_lock = threading.Lock()
+_reindex_lock = threading.Lock()
 _schema_initialized: set[str] = set()
 _runtime_cache: dict[str, tuple[RiffluxConfig, EmbedderBundle]] = {}
 
@@ -117,7 +122,10 @@ def _resolve_runtime(
     if key not in _runtime_cache:
         with _init_lock:
             if key not in _runtime_cache:
+                t0 = time.perf_counter()
                 bundle = resolve_embedder(runtime_config)
+                dt = time.perf_counter() - t0
+                logger.debug("embedder resolved in %.3fs backend=%s model=%s", dt, runtime_config.embedding_backend, bundle.model_label)
                 _runtime_cache[key] = (runtime_config, bundle)
     cached_config, cached_bundle = _runtime_cache[key]
     return cached_config, runtime_db_path, cached_bundle
@@ -131,9 +139,11 @@ def _ensure_schema(store: SqliteStore) -> None:
     with _init_lock:
         if key in _schema_initialized:
             return
+        t0 = time.perf_counter()
         schema_path = Path(__file__).resolve().parents[1] / "db" / "schema.sql"
         store.init_schema(schema_path)
         _schema_initialized.add(key)
+        logger.debug("schema initialized in %.3fs db=%s", time.perf_counter() - t0, key)
 
 
 def _services(
@@ -149,9 +159,30 @@ def _services(
 
 def _clear_caches() -> None:
     """Reset module-level caches. Intended for test teardown."""
+    global _last_reindex_thread  # noqa: PLW0603
+    # Wait for any in-flight background reindex to finish before clearing state.
+    if _last_reindex_thread is not None:
+        _last_reindex_thread.join(timeout=10)
     _schema_initialized.clear()
     _runtime_cache.clear()
     _LAST_AUTO_REINDEX_MONOTONIC.clear()
+    _last_reindex_thread = None
+
+
+def _background_reindex(
+    db_path: Path | None,
+    source_paths: list[Path],
+) -> None:
+    """Run reindex in a background thread. Errors are logged, not raised."""
+    try:
+        reindex_many(
+            db_path=db_path,
+            source_paths=source_paths,
+            force=False,
+            prune_missing=False,
+        )
+    except Exception:
+        logger.exception("background auto-reindex failed")
 
 
 def _maybe_auto_reindex(
@@ -163,30 +194,38 @@ def _maybe_auto_reindex(
 
     effective_db = (db_path or config.db_path).resolve()
     db_key = str(effective_db)
-    now = time.monotonic()
     min_interval = max(0.0, config.auto_reindex_min_interval_seconds)
-    last_run = _LAST_AUTO_REINDEX_MONOTONIC.get(db_key)
-    if last_run is not None and (now - last_run) < min_interval:
-        return {
-            "enabled": True,
-            "executed": False,
-            "reason": "throttled",
-            "min_interval_seconds": min_interval,
-        }
+
+    # Atomic check-and-claim to prevent parallel auto-reindex storms.
+    with _reindex_lock:
+        now = time.monotonic()
+        last_run = _LAST_AUTO_REINDEX_MONOTONIC.get(db_key)
+        if last_run is not None and (now - last_run) < min_interval:
+            return {
+                "enabled": True,
+                "executed": False,
+                "reason": "throttled",
+                "min_interval_seconds": min_interval,
+            }
+        # Claim the slot immediately so parallel calls are throttled.
+        _LAST_AUTO_REINDEX_MONOTONIC[db_key] = now
 
     source_paths = [Path(raw).resolve() for raw in config.auto_reindex_paths]
-    result = reindex_many(
-        db_path=db_path,
-        source_paths=source_paths,
-        force=False,
-        prune_missing=False,
+    t = threading.Thread(
+        target=_background_reindex,
+        args=(db_path, source_paths),
+        daemon=True,
     )
-    _LAST_AUTO_REINDEX_MONOTONIC[db_key] = now
+    t.start()
+
+    global _last_reindex_thread  # noqa: PLW0603
+    _last_reindex_thread = t
+
+    logger.debug("auto-reindex dispatched to background thread for %s", [str(p) for p in source_paths])
     return {
         "enabled": True,
-        "executed": True,
+        "executed": "background",
         "paths": [str(path) for path in source_paths],
-        "result": result,
     }
 
 
@@ -196,12 +235,19 @@ def search_rifflux(
     top_k: int = 10,
     mode: str = "hybrid",
 ) -> dict[str, Any]:
+    t_start = time.perf_counter()
+    logger.debug("search_rifflux start query=%r top_k=%d mode=%s", query, top_k, mode)
     runtime_config = RiffluxConfig.from_env()
     try:
-        auto_reindex = _maybe_auto_reindex(db_path, runtime_config)
+        # Initialise schema/connection first so the DB is ready before any
+        # background thread opens its own connection (avoids EXCLUSIVE-lock
+        # contention from executescript on a fresh database).
         store, search, _, bundle = _services(db_path=db_path)
+        auto_reindex = _maybe_auto_reindex(db_path, runtime_config)
         try:
             results = search.search(query, top_k=top_k, mode=mode)
+            dt = time.perf_counter() - t_start
+            logger.debug("search_rifflux done in %.3fs count=%d", dt, len(results))
             return {
                 "query": query,
                 "mode": mode,
@@ -283,6 +329,8 @@ def reindex_many(
     force: bool = False,
     prune_missing: bool = True,
 ) -> dict[str, Any]:
+    t_start = time.perf_counter()
+    logger.debug("reindex_many start paths=%s force=%s prune=%s", [str(p) for p in source_paths], force, prune_missing)
     try:
         store, _, config, bundle = _services(db_path=db_path)
         try:
@@ -320,6 +368,11 @@ def reindex_many(
 
             store.commit()
 
+            dt = time.perf_counter() - t_start
+            logger.debug(
+                "reindex_many done in %.3fs indexed=%d skipped=%d deleted=%d",
+                dt, indexed_files, skipped_files, deleted_files,
+            )
             return {
                 "indexed_files": indexed_files,
                 "skipped_files": skipped_files,

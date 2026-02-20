@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -9,6 +11,8 @@ from rifflux.db.sqlite_store import SqliteStore
 from rifflux.retrieval.lexical import lexical_search
 from rifflux.retrieval.rrf import rrf_fuse
 from rifflux.retrieval.semantic import semantic_search
+
+logger = logging.getLogger("rifflux.retrieval")
 
 
 class SearchService:
@@ -24,20 +28,35 @@ class SearchService:
         self.rrf_k = rrf_k
 
     def search(self, query: str, *, top_k: int = 10, mode: str = "hybrid") -> list[dict[str, Any]]:
+        t0 = time.perf_counter()
+
+        t_lex = time.perf_counter()
         lexical = (
             lexical_search(self.store, query, top_k=top_k * 2)
             if mode in {"hybrid", "lexical"}
             else []
         )
+        dt_lex = time.perf_counter() - t_lex
+
+        t_embed = time.perf_counter()
         query_vec = (
             self.embed_query(query)
             if self.embed_query and mode in {"hybrid", "semantic"}
             else None
         )
+        dt_embed = time.perf_counter() - t_embed
+
+        t_sem = time.perf_counter()
         semantic = (
             semantic_search(self.store, query_vec, top_k=top_k * 2)
             if mode in {"hybrid", "semantic"}
             else []
+        )
+        dt_sem = time.perf_counter() - t_sem
+
+        logger.debug(
+            "search phases: lexical=%.3fs (%d hits) embed=%.3fs semantic=%.3fs (%d hits)",
+            dt_lex, len(lexical), dt_embed, dt_sem, len(semantic),
         )
 
         if mode == "lexical":
