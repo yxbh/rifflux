@@ -87,6 +87,30 @@ def test_matches_globs_excludes(tmp_path: Path) -> None:
     assert not watcher._matches_globs(Path(".git/config"))
 
 
+def test_matches_globs_windows_separator_safe(tmp_path: Path) -> None:
+    bg = BackgroundIndexer(run_reindex=lambda req: {})
+    watcher = FileWatcher(
+        bg_indexer=bg,
+        watch_paths=[tmp_path],
+        include_globs=("*.md",),
+        exclude_globs=("**/node_modules/*",),
+    )
+    windows_style = Path("docs\\node_modules\\pkg\\README.md")
+    assert not watcher._matches_globs(windows_style)
+
+
+def test_matches_globs_excludes_absolute_under_watch_root(tmp_path: Path) -> None:
+    bg = BackgroundIndexer(run_reindex=lambda req: {})
+    watcher = FileWatcher(
+        bg_indexer=bg,
+        watch_paths=[tmp_path],
+        include_globs=("*.md",),
+        exclude_globs=(".venv/*",),
+    )
+    absolute = tmp_path / ".venv" / "pkg" / "README.md"
+    assert not watcher._matches_globs(absolute)
+
+
 # ---------------------------------------------------------------------------
 # Unit: status() without starting the watcher
 # ---------------------------------------------------------------------------
@@ -215,6 +239,39 @@ def test_watcher_handles_modification_and_deletion(tmp_path: Path) -> None:
     assert watcher._jobs_submitted == 2
 
 
+def test_watcher_coalesces_burst_batches(tmp_path: Path) -> None:
+    """Burst batches should not enqueue redundant full-reindex jobs."""
+    gate = threading.Event()
+
+    def slow_reindex(req: IndexRequest) -> dict:
+        gate.wait(timeout=5)
+        return {"indexed_files": 1}
+
+    fake_changes: list[set[tuple[int, str]]] = [
+        {(1, str(tmp_path / "a.md"))},
+        {(1, str(tmp_path / "b.md"))},
+        {(1, str(tmp_path / "c.md"))},
+    ]
+
+    bg = BackgroundIndexer(run_reindex=slow_reindex)
+    watcher = FileWatcher(
+        bg_indexer=bg,
+        watch_paths=[tmp_path],
+        include_globs=("*.md",),
+        debounce_ms=100,
+    )
+    with patch("rifflux.indexing.watcher.watch", _fake_watch_factory(fake_changes)):
+        watcher.start()
+        watcher._thread.join(timeout=5)
+
+    queued_or_running = [
+        j for j in bg.get_all_jobs() if j.status in {"queued", "running"}
+    ]
+    assert len(queued_or_running) <= 1
+    gate.set()
+    bg.drain(timeout=5)
+
+
 # ---------------------------------------------------------------------------
 # Integration: watcher via tools layer (mocked watcher start)
 # ---------------------------------------------------------------------------
@@ -254,6 +311,32 @@ def test_maybe_start_file_watcher_skips_when_disabled(
     config = RiffluxConfig(file_watcher_enabled=False)
     _maybe_start_file_watcher(db_path=None, config=config)
     assert _get_file_watcher() is None
+
+
+def test_maybe_start_file_watcher_recreates_for_new_db(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(FileWatcher, "start", lambda self: None)
+
+    config = RiffluxConfig(
+        file_watcher_enabled=True,
+        file_watcher_paths=(str(tmp_path),),
+        file_watcher_debounce_ms=100,
+    )
+
+    db1 = tmp_path / "a.db"
+    db2 = tmp_path / "b.db"
+    _maybe_start_file_watcher(db_path=db1, config=config)
+    first = _get_file_watcher()
+    assert first is not None
+
+    # Simulate running watcher so code path that would normally early-return is hit.
+    monkeypatch.setattr(FileWatcher, "is_running", property(lambda self: True))
+    _maybe_start_file_watcher(db_path=db2, config=config)
+    second = _get_file_watcher()
+    assert second is not None
+    assert second is not first
 
 
 def test_index_status_includes_watcher_info(

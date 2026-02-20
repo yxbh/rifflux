@@ -144,6 +144,19 @@ def test_submit_after_shutdown_raises() -> None:
         bg.submit(IndexRequest(db_path=None, source_paths=[]))
 
 
+def test_submit_shutdown_race_does_not_leave_queued_job() -> None:
+    """Submit must not enqueue once shutdown state is set under lock."""
+    bg = BackgroundIndexer(run_reindex=lambda r: {"ok": 1})
+    with bg._lock:  # type: ignore[attr-defined]
+        bg._is_shutdown = True  # type: ignore[attr-defined]
+
+    with pytest.raises(RuntimeError, match="shut down"):
+        bg.submit(IndexRequest(db_path=None, source_paths=[]))
+
+    jobs = bg.get_all_jobs()
+    assert not any(job.status == "queued" for job in jobs)
+
+
 # ---------------------------------------------------------------------------
 # FileWatcher: auto-restart on crash
 # ---------------------------------------------------------------------------

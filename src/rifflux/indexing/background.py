@@ -94,21 +94,22 @@ class BackgroundIndexer:
         self._queue: deque[str] = deque()
         self._worker: threading.Thread | None = None
         self._shutdown_event = threading.Event()
+        self._is_shutdown = False
 
     # -- public API ----------------------------------------------------------
 
     def submit(self, request: IndexRequest) -> IndexJob:
         """Enqueue a reindex job. Returns the job immediately (status=queued)."""
-        if self._shutdown_event.is_set():
-            raise RuntimeError("BackgroundIndexer is shut down")
-        job_id = uuid4().hex[:12]
-        job = IndexJob(
-            job_id=job_id,
-            status="queued",
-            request=request,
-            created_at=time.monotonic(),
-        )
         with self._lock:
+            if self._is_shutdown:
+                raise RuntimeError("BackgroundIndexer is shut down")
+            job_id = uuid4().hex[:12]
+            job = IndexJob(
+                job_id=job_id,
+                status="queued",
+                request=request,
+                created_at=time.monotonic(),
+            )
             self._jobs[job_id] = job
             self._queue.append(job_id)
             self._maybe_start_worker()
@@ -134,9 +135,10 @@ class BackgroundIndexer:
 
         Safe to call multiple times or from atexit/signal handlers.
         """
-        self._shutdown_event.set()
-        # Cancel queued (not yet running) jobs.
         with self._lock:
+            self._is_shutdown = True
+            self._shutdown_event.set()
+            # Cancel queued (not yet running) jobs.
             while self._queue:
                 job_id = self._queue.popleft()
                 job = self._jobs.get(job_id)

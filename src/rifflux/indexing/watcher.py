@@ -65,6 +65,7 @@ class FileWatcher:
     ) -> None:
         self._bg_indexer = bg_indexer
         self._watch_paths = [p.resolve() for p in watch_paths]
+        self._watch_paths_key = tuple(str(p.resolve()) for p in watch_paths)
         self._db_path = db_path
         self._include_globs = include_globs
         self._exclude_globs = exclude_globs
@@ -135,12 +136,41 @@ class FileWatcher:
     def _matches_globs(self, file_path: Path) -> bool:
         """Check if a changed file matches include globs and not exclude globs."""
         name = file_path.name
-        rel = str(file_path)
-        included = any(fnmatch(name, g) or fnmatch(rel, g) for g in self._include_globs)
+        normalized = str(file_path).replace("\\", "/")
+        variants = {name, normalized}
+
+        try:
+            resolved = file_path.resolve()
+        except Exception:
+            resolved = None
+
+        if resolved is not None:
+            variants.add(str(resolved).replace("\\", "/"))
+            for root in self._watch_paths:
+                try:
+                    rel = resolved.relative_to(root)
+                except Exception:
+                    continue
+                variants.add(rel.as_posix())
+
+        included = any(fnmatch(candidate, g) for candidate in variants for g in self._include_globs)
         if not included:
             return False
-        excluded = any(fnmatch(name, g) or fnmatch(rel, g) for g in self._exclude_globs)
+
+        excluded = any(fnmatch(candidate, g) for candidate in variants for g in self._exclude_globs)
         return not excluded
+
+    def _has_pending_reindex_job(self) -> bool:
+        db_key = str(self._db_path.resolve()) if self._db_path is not None else None
+        for job in self._bg_indexer.get_all_jobs():
+            if job.status not in {"queued", "running"}:
+                continue
+            req_db = job.request.db_path
+            req_db_key = str(req_db.resolve()) if req_db is not None else None
+            req_paths_key = tuple(str(Path(path).resolve()) for path in job.request.source_paths)
+            if req_db_key == db_key and req_paths_key == self._watch_paths_key:
+                return True
+        return False
 
     def _run_with_restart(self) -> None:
         """Outer loop that auto-restarts ``_watch_loop`` on crash."""
@@ -194,6 +224,10 @@ class FileWatcher:
                 "file watcher: %d relevant changes detected",
                 len(relevant),
             )
+
+            if self._has_pending_reindex_job():
+                logger.debug("file watcher: coalesced burst while reindex job pending")
+                continue
 
             # Submit one reindex job covering all watched paths.
             request = IndexRequest(

@@ -64,7 +64,7 @@ Rifflux supports a configurable embedding backend via environment variables:
 - `RIFLUX_AUTO_REINDEX_PATHS=.` (comma-separated paths)
 - `RIFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS=2.0`
 - `RIFLUX_FILE_WATCHER=0|1` (default `0`)
-- `RIFLUX_FILE_WATCHER_PATHS=.` (comma-separated directories to watch)
+- `RIFLUX_FILE_WATCHER_PATHS=` (comma-separated directories to watch; required when watcher is enabled)
 - `RIFLUX_FILE_WATCHER_DEBOUNCE_MS=500` (minimum ms between FS event batches)
 
 Behavior:
@@ -77,7 +77,7 @@ Behavior:
 
 File watcher:
 
-- When `RIFLUX_FILE_WATCHER=1`, Rifflux monitors `RIFLUX_FILE_WATCHER_PATHS` for file changes and automatically triggers background reindex.
+- When `RIFLUX_FILE_WATCHER=1` and `RIFLUX_FILE_WATCHER_PATHS` is set, Riflux monitors those paths for file changes and automatically triggers background reindex.
 - The watcher uses `watchfiles` (Rust-backed, cross-platform). Install with `pip install -e .[watch]` or `pip install -e .[dev]`.
 - Only files matching `RIFLUX_INDEX_INCLUDE_GLOBS` (and not excluded) trigger reindex jobs.
 - The watcher auto-restarts on transient OS errors (up to 5 consecutive crashes with exponential backoff).

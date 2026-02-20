@@ -24,6 +24,7 @@ from rifflux.retrieval.search import SearchService
 _LAST_AUTO_REINDEX_MONOTONIC: dict[str, float] = {}
 _bg_indexer: BackgroundIndexer | None = None
 _file_watcher: FileWatcher | None = None
+_file_watcher_scope: tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...], int] | None = None
 
 # Thread-safe caches to avoid repeated expensive init on parallel tool calls.
 _init_lock = threading.Lock()
@@ -186,26 +187,50 @@ def _maybe_start_file_watcher(
     config: RiffluxConfig,
 ) -> None:
     """Start the file watcher if configured and not already running."""
-    global _file_watcher  # noqa: PLW0603
+    global _file_watcher, _file_watcher_scope  # noqa: PLW0603
     if not config.file_watcher_enabled or not config.file_watcher_paths:
         return
-    if _file_watcher is not None and _file_watcher.is_running:
+
+    effective_db = (db_path or config.db_path).resolve()
+    watch_paths = [Path(p).resolve() for p in config.file_watcher_paths]
+    target_scope = (
+        str(effective_db),
+        tuple(str(p) for p in watch_paths),
+        tuple(config.index_include_globs),
+        tuple(config.index_exclude_globs),
+        int(config.file_watcher_debounce_ms),
+    )
+
+    if (
+        _file_watcher is not None
+        and _file_watcher.is_running
+        and _file_watcher_scope == target_scope
+    ):
         return
+
     # Resolve the bg_indexer BEFORE acquiring _init_lock to avoid deadlock
     # (_get_bg_indexer also acquires _init_lock and Lock is not reentrant).
     bg_indexer = _get_bg_indexer()
     with _init_lock:
-        if _file_watcher is not None and _file_watcher.is_running:
+        if (
+            _file_watcher is not None
+            and _file_watcher.is_running
+            and _file_watcher_scope == target_scope
+        ):
             return
-        watch_paths = [Path(p).resolve() for p in config.file_watcher_paths]
+
+        if _file_watcher is not None and _file_watcher_scope != target_scope:
+            _file_watcher.stop(timeout=3)
+
         _file_watcher = FileWatcher(
             bg_indexer=bg_indexer,
             watch_paths=watch_paths,
-            db_path=db_path,
+            db_path=effective_db,
             include_globs=config.index_include_globs,
             exclude_globs=config.index_exclude_globs,
             debounce_ms=config.file_watcher_debounce_ms,
         )
+        _file_watcher_scope = target_scope
         _file_watcher.start()
 
 
@@ -215,7 +240,7 @@ def _get_file_watcher() -> FileWatcher | None:
 
 def _clear_caches() -> None:
     """Reset module-level caches. Intended for test teardown."""
-    global _bg_indexer, _file_watcher  # noqa: PLW0603
+    global _bg_indexer, _file_watcher, _file_watcher_scope  # noqa: PLW0603
     # Stop file watcher first.
     if _file_watcher is not None:
         _file_watcher.stop(timeout=2)
@@ -227,6 +252,7 @@ def _clear_caches() -> None:
     _LAST_AUTO_REINDEX_MONOTONIC.clear()
     _bg_indexer = None
     _file_watcher = None
+    _file_watcher_scope = None
 
 
 def _shutdown_server() -> None:
@@ -235,7 +261,7 @@ def _shutdown_server() -> None:
     Registered via ``atexit`` so it runs when the process exits normally
     or when VS Code / the user kills the MCP server.
     """
-    global _bg_indexer, _file_watcher  # noqa: PLW0603
+    global _bg_indexer, _file_watcher, _file_watcher_scope  # noqa: PLW0603
     logger.info("rifflux shutdown initiated")
     # 1. Stop file watcher so no new jobs are submitted.
     if _file_watcher is not None:
@@ -251,6 +277,7 @@ def _shutdown_server() -> None:
             logger.debug("error shutting down bg indexer during shutdown", exc_info=True)
     _bg_indexer = None
     _file_watcher = None
+    _file_watcher_scope = None
     logger.info("rifflux shutdown complete")
 
 
