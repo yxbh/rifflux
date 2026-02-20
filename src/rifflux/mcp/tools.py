@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,11 @@ from rifflux.retrieval.search import SearchService
 
 
 _LAST_AUTO_REINDEX_MONOTONIC: dict[str, float] = {}
+
+# Thread-safe caches to avoid repeated expensive init on parallel tool calls.
+_init_lock = threading.Lock()
+_schema_initialized: set[str] = set()
+_runtime_cache: dict[str, tuple[RiffluxConfig, EmbedderBundle]] = {}
 
 
 def _db_for_hint(db_path: Path | None, config: RiffluxConfig | None = None) -> Path:
@@ -107,8 +113,27 @@ def _resolve_runtime(
 ) -> tuple[RiffluxConfig, Path, EmbedderBundle]:
     runtime_config = config or RiffluxConfig.from_env()
     runtime_db_path = db_path or runtime_config.db_path
-    bundle = resolve_embedder(runtime_config)
-    return runtime_config, runtime_db_path, bundle
+    key = str(runtime_db_path.resolve())
+    if key not in _runtime_cache:
+        with _init_lock:
+            if key not in _runtime_cache:
+                bundle = resolve_embedder(runtime_config)
+                _runtime_cache[key] = (runtime_config, bundle)
+    cached_config, cached_bundle = _runtime_cache[key]
+    return cached_config, runtime_db_path, cached_bundle
+
+
+def _ensure_schema(store: SqliteStore) -> None:
+    """Run schema DDL once per database path. Thread-safe."""
+    key = str(store.db_path.resolve())
+    if key in _schema_initialized:
+        return
+    with _init_lock:
+        if key in _schema_initialized:
+            return
+        schema_path = Path(__file__).resolve().parents[1] / "db" / "schema.sql"
+        store.init_schema(schema_path)
+        _schema_initialized.add(key)
 
 
 def _services(
@@ -117,10 +142,16 @@ def _services(
 ) -> tuple[SqliteStore, SearchService, RiffluxConfig, EmbedderBundle]:
     runtime_config, runtime_db_path, bundle = _resolve_runtime(config, db_path)
     store = SqliteStore(runtime_db_path)
-    schema_path = Path(__file__).resolve().parents[1] / "db" / "schema.sql"
-    store.init_schema(schema_path)
+    _ensure_schema(store)
     search_service = SearchService(store, embed_query=bundle.embed, rrf_k=runtime_config.rrf_k)
     return store, search_service, runtime_config, bundle
+
+
+def _clear_caches() -> None:
+    """Reset module-level caches. Intended for test teardown."""
+    _schema_initialized.clear()
+    _runtime_cache.clear()
+    _LAST_AUTO_REINDEX_MONOTONIC.clear()
 
 
 def _maybe_auto_reindex(

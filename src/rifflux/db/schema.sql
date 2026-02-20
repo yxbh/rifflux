@@ -1,7 +1,3 @@
-PRAGMA journal_mode=WAL;
-PRAGMA synchronous=NORMAL;
-PRAGMA foreign_keys=ON;
-
 CREATE TABLE IF NOT EXISTS files (
   id INTEGER PRIMARY KEY,
   path TEXT NOT NULL UNIQUE,
