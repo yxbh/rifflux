@@ -11,6 +11,7 @@ Rifflux is a local/offline retrieval engine for markdown and file content with h
 
 - [Rifflux architecture, indexing flow, and MCP-vs-grep comparison](docs/rifflux-architecture-and-search.md)
 - [Fresh quantitative benchmark: MCP indexed search vs grep-style scan](docs/mcp-vs-grep-benchmark.md)
+- [Embedding backend decision record (why ONNX, alternatives, trade-offs)](docs/embedding-backend-decision.md)
 
 ## Status
 
@@ -74,6 +75,18 @@ Behavior:
 - `auto`: try ONNX path first, then hash fallback
 - indexing scope: include/exclude globs are applied by the MCP server during reindex
 - optional live refresh: if `RIFLUX_AUTO_REINDEX_ON_SEARCH=1`, each search performs incremental reindex over `RIFLUX_AUTO_REINDEX_PATHS` (throttled by `RIFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS`)
+
+### Embedding model choice
+
+For rationale and comparisons (including why ONNX is the primary semantic
+path and what alternatives were considered), see
+`docs/embedding-backend-decision.md`.
+
+Quick operational defaults:
+
+- `auto`: recommended default for mixed/dev environments.
+- `onnx`: preferred when semantic quality is a priority and setup is controlled.
+- `hash`: preferred for deterministic CI/minimal-setup workflows.
 
 File watcher:
 

@@ -177,6 +177,14 @@ blocking interactive calls:
 - Watcher auto-restarts on transient crashes (up to configured cap).
 - `index_status` reports job and watcher state.
 
+## Embedding Backend Decision (Pros/Cons)
+
+Rifflux uses ONNX as the primary semantic path, with `auto` runtime default
+(`onnx` first, deterministic `hash` fallback) to keep environments resilient.
+
+For full rationale, alternatives considered, and explicit pros/cons
+comparisons, see `docs/embedding-backend-decision.md`.
+
 ## Where to Look in Code
 
 - MCP tools and orchestration: `src/rifflux/mcp/tools.py`
