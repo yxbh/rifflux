@@ -14,12 +14,13 @@ from rifflux.config import RiffluxConfig
 logger = logging.getLogger("rifflux.mcp.tools")
 from rifflux.db.sqlite_store import SqliteStore
 from rifflux.embeddings.embedder_factory import EmbedderBundle, resolve_embedder
+from rifflux.indexing.background import BackgroundIndexer, IndexRequest
 from rifflux.indexing.indexer import Indexer
 from rifflux.retrieval.search import SearchService
 
 
 _LAST_AUTO_REINDEX_MONOTONIC: dict[str, float] = {}
-_last_reindex_thread: threading.Thread | None = None
+_bg_indexer: BackgroundIndexer | None = None
 
 # Thread-safe caches to avoid repeated expensive init on parallel tool calls.
 _init_lock = threading.Lock()
@@ -157,32 +158,36 @@ def _services(
     return store, search_service, runtime_config, bundle
 
 
+def _run_reindex_job(request: IndexRequest) -> dict[str, Any]:
+    """Callback for BackgroundIndexer — runs a blocking reindex."""
+    return reindex_many(
+        db_path=request.db_path,
+        source_paths=request.source_paths,
+        force=request.force,
+        prune_missing=request.prune_missing,
+    )
+
+
+def _get_bg_indexer() -> BackgroundIndexer:
+    """Lazy singleton for the background indexer."""
+    global _bg_indexer  # noqa: PLW0603
+    if _bg_indexer is None:
+        with _init_lock:
+            if _bg_indexer is None:
+                _bg_indexer = BackgroundIndexer(run_reindex=_run_reindex_job)
+    return _bg_indexer
+
+
 def _clear_caches() -> None:
     """Reset module-level caches. Intended for test teardown."""
-    global _last_reindex_thread  # noqa: PLW0603
-    # Wait for any in-flight background reindex to finish before clearing state.
-    if _last_reindex_thread is not None:
-        _last_reindex_thread.join(timeout=10)
+    global _bg_indexer  # noqa: PLW0603
+    # Drain any in-flight background jobs before clearing state.
+    if _bg_indexer is not None:
+        _bg_indexer.drain(timeout=10)
     _schema_initialized.clear()
     _runtime_cache.clear()
     _LAST_AUTO_REINDEX_MONOTONIC.clear()
-    _last_reindex_thread = None
-
-
-def _background_reindex(
-    db_path: Path | None,
-    source_paths: list[Path],
-) -> None:
-    """Run reindex in a background thread. Errors are logged, not raised."""
-    try:
-        reindex_many(
-            db_path=db_path,
-            source_paths=source_paths,
-            force=False,
-            prune_missing=False,
-        )
-    except Exception:
-        logger.exception("background auto-reindex failed")
+    _bg_indexer = None
 
 
 def _maybe_auto_reindex(
@@ -211,20 +216,18 @@ def _maybe_auto_reindex(
         _LAST_AUTO_REINDEX_MONOTONIC[db_key] = now
 
     source_paths = [Path(raw).resolve() for raw in config.auto_reindex_paths]
-    t = threading.Thread(
-        target=_background_reindex,
-        args=(db_path, source_paths),
-        daemon=True,
+    request = IndexRequest(
+        db_path=db_path,
+        source_paths=source_paths,
+        force=False,
+        prune_missing=False,
     )
-    t.start()
-
-    global _last_reindex_thread  # noqa: PLW0603
-    _last_reindex_thread = t
-
-    logger.debug("auto-reindex dispatched to background thread for %s", [str(p) for p in source_paths])
+    job = _get_bg_indexer().submit(request)
+    logger.debug("auto-reindex job %s submitted for %s", job.job_id, [str(p) for p in source_paths])
     return {
         "enabled": True,
         "executed": "background",
+        "job_id": job.job_id,
         "paths": [str(path) for path in source_paths],
     }
 
@@ -292,6 +295,7 @@ def index_status(db_path: Path | None) -> dict[str, Any]:
         try:
             fingerprint_raw = store.get_metadata("git_fingerprint")
             fingerprint = json.loads(fingerprint_raw) if fingerprint_raw else None
+            jobs = [j.to_dict() for j in _get_bg_indexer().get_all_jobs()]
             return {
                 **store.index_status(),
                 "db_path": str(config.db_path if db_path is None else db_path),
@@ -300,6 +304,7 @@ def index_status(db_path: Path | None) -> dict[str, Any]:
                 "index_include_globs": list(config.index_include_globs),
                 "index_exclude_globs": list(config.index_exclude_globs),
                 "git_fingerprint": fingerprint,
+                "background_jobs": jobs,
             }
         finally:
             store.close()
@@ -312,7 +317,20 @@ def reindex(
     source_path: Path,
     force: bool = False,
     prune_missing: bool = True,
+    background: bool = False,
 ) -> dict[str, Any]:
+    if background:
+        request = IndexRequest(
+            db_path=db_path,
+            source_paths=[source_path],
+            force=force,
+            prune_missing=prune_missing,
+        )
+        # Ensure schema is ready before the background thread opens a connection.
+        store, *_ = _services(db_path=db_path)
+        store.close()
+        job = _get_bg_indexer().submit(request)
+        return job.to_dict()
     result = reindex_many(
         db_path=db_path,
         source_paths=[source_path],
@@ -328,7 +346,20 @@ def reindex_many(
     source_paths: list[Path],
     force: bool = False,
     prune_missing: bool = True,
+    background: bool = False,
 ) -> dict[str, Any]:
+    if background:
+        request = IndexRequest(
+            db_path=db_path,
+            source_paths=source_paths,
+            force=force,
+            prune_missing=prune_missing,
+        )
+        # Ensure schema is ready before the background thread opens a connection.
+        store, *_ = _services(db_path=db_path)
+        store.close()
+        job = _get_bg_indexer().submit(request)
+        return job.to_dict()
     t_start = time.perf_counter()
     logger.debug("reindex_many start paths=%s force=%s prune=%s", [str(p) for p in source_paths], force, prune_missing)
     try:

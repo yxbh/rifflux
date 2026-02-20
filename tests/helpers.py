@@ -46,6 +46,7 @@ EXPECTED_MCP_TOOL_PARAM_DESCRIPTIONS = {
         "paths": "Multiple directories or file paths to index.",
         "force": "Rebuild matching entries even if unchanged.",
         "prune_missing": "Delete indexed files missing from scanned paths.",
+        "background": "Run indexing in the background and return a job_id immediately.",
     },
 }
 

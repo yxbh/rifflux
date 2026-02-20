@@ -99,6 +99,10 @@ def create_server(db_path: Path | None = None) -> FastMCP:
             bool,
             Field(description="Delete indexed files missing from scanned paths."),
         ] = True,
+        background: Annotated[
+            bool,
+            Field(description="Run indexing in the background and return a job_id immediately."),
+        ] = False,
     ) -> dict[str, Any]:
         """Index one path or multiple paths and optionally force a full rebuild."""
         if paths:
@@ -110,6 +114,7 @@ def create_server(db_path: Path | None = None) -> FastMCP:
                     source_paths=source_paths,
                     force=force,
                     prune_missing=prune_missing,
+                    background=background,
                 ),
             )
         source = Path(path) if path else Path.cwd()
@@ -120,6 +125,7 @@ def create_server(db_path: Path | None = None) -> FastMCP:
                 source_path=source,
                 force=force,
                 prune_missing=prune_missing,
+                background=background,
             ),
         )
 
