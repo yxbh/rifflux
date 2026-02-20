@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import json
 import logging
 import sqlite3
@@ -16,11 +17,13 @@ from rifflux.db.sqlite_store import SqliteStore
 from rifflux.embeddings.embedder_factory import EmbedderBundle, resolve_embedder
 from rifflux.indexing.background import BackgroundIndexer, IndexRequest
 from rifflux.indexing.indexer import Indexer
+from rifflux.indexing.watcher import FileWatcher
 from rifflux.retrieval.search import SearchService
 
 
 _LAST_AUTO_REINDEX_MONOTONIC: dict[str, float] = {}
 _bg_indexer: BackgroundIndexer | None = None
+_file_watcher: FileWatcher | None = None
 
 # Thread-safe caches to avoid repeated expensive init on parallel tool calls.
 _init_lock = threading.Lock()
@@ -178,9 +181,44 @@ def _get_bg_indexer() -> BackgroundIndexer:
     return _bg_indexer
 
 
+def _maybe_start_file_watcher(
+    db_path: Path | None,
+    config: RiffluxConfig,
+) -> None:
+    """Start the file watcher if configured and not already running."""
+    global _file_watcher  # noqa: PLW0603
+    if not config.file_watcher_enabled or not config.file_watcher_paths:
+        return
+    if _file_watcher is not None and _file_watcher.is_running:
+        return
+    # Resolve the bg_indexer BEFORE acquiring _init_lock to avoid deadlock
+    # (_get_bg_indexer also acquires _init_lock and Lock is not reentrant).
+    bg_indexer = _get_bg_indexer()
+    with _init_lock:
+        if _file_watcher is not None and _file_watcher.is_running:
+            return
+        watch_paths = [Path(p).resolve() for p in config.file_watcher_paths]
+        _file_watcher = FileWatcher(
+            bg_indexer=bg_indexer,
+            watch_paths=watch_paths,
+            db_path=db_path,
+            include_globs=config.index_include_globs,
+            exclude_globs=config.index_exclude_globs,
+            debounce_ms=config.file_watcher_debounce_ms,
+        )
+        _file_watcher.start()
+
+
+def _get_file_watcher() -> FileWatcher | None:
+    return _file_watcher
+
+
 def _clear_caches() -> None:
     """Reset module-level caches. Intended for test teardown."""
-    global _bg_indexer  # noqa: PLW0603
+    global _bg_indexer, _file_watcher  # noqa: PLW0603
+    # Stop file watcher first.
+    if _file_watcher is not None:
+        _file_watcher.stop(timeout=2)
     # Drain any in-flight background jobs before clearing state.
     if _bg_indexer is not None:
         _bg_indexer.drain(timeout=10)
@@ -188,6 +226,35 @@ def _clear_caches() -> None:
     _runtime_cache.clear()
     _LAST_AUTO_REINDEX_MONOTONIC.clear()
     _bg_indexer = None
+    _file_watcher = None
+
+
+def _shutdown_server() -> None:
+    """Graceful shutdown: stop watcher, cancel pending jobs, wait for running.
+
+    Registered via ``atexit`` so it runs when the process exits normally
+    or when VS Code / the user kills the MCP server.
+    """
+    global _bg_indexer, _file_watcher  # noqa: PLW0603
+    logger.info("rifflux shutdown initiated")
+    # 1. Stop file watcher so no new jobs are submitted.
+    if _file_watcher is not None:
+        try:
+            _file_watcher.stop(timeout=3)
+        except Exception:
+            logger.debug("error stopping file watcher during shutdown", exc_info=True)
+    # 2. Shutdown background indexer (cancel queued, wait for running).
+    if _bg_indexer is not None:
+        try:
+            _bg_indexer.shutdown(timeout=10)
+        except Exception:
+            logger.debug("error shutting down bg indexer during shutdown", exc_info=True)
+    _bg_indexer = None
+    _file_watcher = None
+    logger.info("rifflux shutdown complete")
+
+
+atexit.register(_shutdown_server)
 
 
 def _maybe_auto_reindex(
@@ -247,6 +314,7 @@ def search_rifflux(
         # contention from executescript on a fresh database).
         store, search, _, bundle = _services(db_path=db_path)
         auto_reindex = _maybe_auto_reindex(db_path, runtime_config)
+        _maybe_start_file_watcher(db_path, runtime_config)
         try:
             results = search.search(query, top_k=top_k, mode=mode)
             dt = time.perf_counter() - t_start
@@ -296,6 +364,7 @@ def index_status(db_path: Path | None) -> dict[str, Any]:
             fingerprint_raw = store.get_metadata("git_fingerprint")
             fingerprint = json.loads(fingerprint_raw) if fingerprint_raw else None
             jobs = [j.to_dict() for j in _get_bg_indexer().get_all_jobs()]
+            watcher = _file_watcher.status() if _file_watcher is not None else {"enabled": False}
             return {
                 **store.index_status(),
                 "db_path": str(config.db_path if db_path is None else db_path),
@@ -305,6 +374,7 @@ def index_status(db_path: Path | None) -> dict[str, Any]:
                 "index_exclude_globs": list(config.index_exclude_globs),
                 "git_fingerprint": fingerprint,
                 "background_jobs": jobs,
+                "file_watcher": watcher,
             }
         finally:
             store.close()

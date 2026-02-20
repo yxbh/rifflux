@@ -99,7 +99,7 @@ def test_to_dict_has_expected_fields() -> None:
     bg.drain(timeout=5)
 
     d = bg.get_job(job.job_id).to_dict()
-    assert set(d.keys()) == {"job_id", "status", "elapsed_seconds", "result", "error"}
+    assert set(d.keys()) == {"job_id", "status", "elapsed_seconds", "result", "error", "retries"}
     assert d["status"] == "completed"
     assert d["elapsed_seconds"] is not None
 

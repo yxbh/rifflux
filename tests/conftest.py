@@ -9,9 +9,11 @@ from tests.helpers import write_search_fixture_corpus
 
 
 @pytest.fixture(autouse=True)
-def _clear_tools_caches() -> None:
+def _clear_tools_caches():
     """Reset module-level caches in mcp.tools between tests."""
     from rifflux.mcp.tools import _clear_caches
+    _clear_caches()
+    yield
     _clear_caches()
 
 

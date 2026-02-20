@@ -35,7 +35,9 @@ class RiffluxConfig:
     auto_reindex_on_search: bool = False
     auto_reindex_paths: tuple[str, ...] = (".",)
     auto_reindex_min_interval_seconds: float = 2.0
-
+    file_watcher_enabled: bool = False
+    file_watcher_paths: tuple[str, ...] = ()
+    file_watcher_debounce_ms: int = 500
     @classmethod
     def from_env(cls) -> "RiffluxConfig":
         db_path = Path(os.getenv("RIFLUX_DB_PATH", str(DEFAULT_DB_PATH)))
@@ -61,6 +63,15 @@ class RiffluxConfig:
         auto_reindex_min_interval_seconds = float(
             os.getenv("RIFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS", "2.0")
         )
+        file_watcher_enabled = _parse_bool(
+            os.getenv("RIFLUX_FILE_WATCHER", "0")
+        )
+        file_watcher_paths = _parse_glob_list(
+            os.getenv("RIFLUX_FILE_WATCHER_PATHS", "")
+        )
+        file_watcher_debounce_ms = int(
+            os.getenv("RIFLUX_FILE_WATCHER_DEBOUNCE_MS", "500")
+        )
         return cls(
             db_path=db_path,
             max_chunk_chars=max_chunk_chars,
@@ -74,4 +85,7 @@ class RiffluxConfig:
             auto_reindex_on_search=auto_reindex_on_search,
             auto_reindex_paths=auto_reindex_paths,
             auto_reindex_min_interval_seconds=auto_reindex_min_interval_seconds,
+            file_watcher_enabled=file_watcher_enabled,
+            file_watcher_paths=file_watcher_paths,
+            file_watcher_debounce_ms=file_watcher_debounce_ms,
         )
