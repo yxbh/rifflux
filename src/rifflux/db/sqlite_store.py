@@ -12,9 +12,12 @@ class SqliteStore:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(db_path))
+        self.conn = sqlite3.connect(str(db_path), timeout=30.0)
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
+        self.conn.execute("PRAGMA busy_timeout=30000")
 
     def close(self) -> None:
         self.conn.close()
@@ -30,6 +33,11 @@ class SqliteStore:
             (path,),
         )
         return cur.fetchone()
+
+    def get_all_file_meta(self) -> dict[str, dict[str, Any]]:
+        """Return {path: {id, mtime_ns, size_bytes, sha256}} for all indexed files."""
+        cur = self.conn.execute("SELECT id, path, mtime_ns, size_bytes, sha256 FROM files")
+        return {row["path"]: dict(row) for row in cur.fetchall()}
 
     def upsert_file(self, path: str, mtime_ns: int, size_bytes: int, sha256: str) -> int:
         self.conn.execute(

@@ -2,10 +2,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import os
 from pathlib import Path
 
 from rifflux.config import RiffluxConfig
 from rifflux.mcp.tools import reindex, search_rifflux
+
+
+def _configure_logging() -> None:
+    level_name = os.getenv("RIFLUX_LOG_LEVEL", "WARNING").upper()
+    level = getattr(logging, level_name, logging.WARNING)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
 
 def _reindex_parser() -> argparse.ArgumentParser:
@@ -42,6 +54,7 @@ def _rebuild_parser() -> argparse.ArgumentParser:
 
 
 def reindex_main() -> None:
+    _configure_logging()
     args = _reindex_parser().parse_args()
     db_path = Path(args.db) if args.db else None
     source_path = Path(args.path).resolve()
@@ -50,6 +63,7 @@ def reindex_main() -> None:
 
 
 def query_main() -> None:
+    _configure_logging()
     args = _query_parser().parse_args()
     db_path = Path(args.db) if args.db else None
     result = search_rifflux(
@@ -62,6 +76,7 @@ def query_main() -> None:
 
 
 def rebuild_main() -> None:
+    _configure_logging()
     args = _rebuild_parser().parse_args()
     source_path = Path(args.path).resolve()
 

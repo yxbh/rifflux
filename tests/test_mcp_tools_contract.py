@@ -218,9 +218,17 @@ def test_search_can_auto_reindex_when_enabled(
     db_path = make_db_path("rifflux-tools-auto-reindex.db")
 
     first = search_rifflux(db_path=db_path, query="cache ttl", top_k=5, mode="hybrid")
-    assert first["count"] >= 1
     assert first["auto_reindex"] is not None
-    assert first["auto_reindex"]["executed"] is True
+    assert first["auto_reindex"]["executed"] == "background"
+    assert "job_id" in first["auto_reindex"]
+
+    # Wait for the background reindex job to finish before checking results.
+    import rifflux.mcp.tools as _tools_mod
+    _tools_mod._get_bg_indexer().drain(timeout=10)
+
+    # Now search again to see the freshly-indexed content.
+    first2 = search_rifflux(db_path=db_path, query="cache ttl", top_k=5, mode="hybrid")
+    assert first2["count"] >= 1
 
     doc.write_text(
         "# Note\n\n"
@@ -235,6 +243,15 @@ def test_search_can_auto_reindex_when_enabled(
         top_k=5,
         mode="hybrid",
     )
-    assert second["count"] >= 1
     assert second["auto_reindex"] is not None
-    assert second["auto_reindex"]["executed"] is True
+    assert second["auto_reindex"]["executed"] == "background"
+
+    _tools_mod._get_bg_indexer().drain(timeout=10)
+
+    second2 = search_rifflux(
+        db_path=db_path,
+        query="semantic refresh marker",
+        top_k=5,
+        mode="hybrid",
+    )
+    assert second2["count"] >= 1

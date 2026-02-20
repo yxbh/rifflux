@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import os
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
+import anyio
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
@@ -24,7 +27,7 @@ def create_server(db_path: Path | None = None) -> FastMCP:
     mcp = FastMCP("rifflux")
 
     @mcp.tool()
-    def search_rifflux(
+    async def search_rifflux(
         query: Annotated[
             str,
             Field(description="Natural-language query to search indexed content."),
@@ -43,40 +46,43 @@ def create_server(db_path: Path | None = None) -> FastMCP:
         ] = "hybrid",
     ) -> dict[str, Any]:
         """Search indexed content using lexical, semantic, or hybrid retrieval modes."""
-        return mcp_search_rifflux(
-            resolved_db_path,
-            query=query,
-            top_k=top_k,
-            mode=mode,
+        return await anyio.to_thread.run_sync(
+            partial(mcp_search_rifflux, resolved_db_path, query=query, top_k=top_k, mode=mode),
         )
 
     @mcp.tool()
-    def get_chunk(
+    async def get_chunk(
         chunk_id: Annotated[
             str,
             Field(description="Stable chunk identifier returned by search results."),
         ]
     ) -> dict[str, Any]:
         """Get one indexed chunk by stable chunk ID, including metadata and content."""
-        return mcp_get_chunk(resolved_db_path, chunk_id=chunk_id)
+        return await anyio.to_thread.run_sync(
+            partial(mcp_get_chunk, resolved_db_path, chunk_id=chunk_id),
+        )
 
     @mcp.tool()
-    def get_file(
+    async def get_file(
         path: Annotated[
             str,
             Field(description="Source file path to retrieve from the index."),
         ]
     ) -> dict[str, Any]:
         """Get all indexed chunks and metadata for a specific source file path."""
-        return mcp_get_file(resolved_db_path, path=path)
+        return await anyio.to_thread.run_sync(
+            partial(mcp_get_file, resolved_db_path, path=path),
+        )
 
     @mcp.tool()
-    def index_status() -> dict[str, Any]:
+    async def index_status() -> dict[str, Any]:
         """Report current index counts and embedding backend/model configuration."""
-        return mcp_index_status(resolved_db_path)
+        return await anyio.to_thread.run_sync(
+            partial(mcp_index_status, resolved_db_path),
+        )
 
     @mcp.tool()
-    def reindex(
+    async def reindex(
         path: Annotated[
             str | None,
             Field(description="Single directory or file path to index."),
@@ -93,28 +99,51 @@ def create_server(db_path: Path | None = None) -> FastMCP:
             bool,
             Field(description="Delete indexed files missing from scanned paths."),
         ] = True,
+        background: Annotated[
+            bool,
+            Field(description="Run indexing in the background and return a job_id immediately."),
+        ] = False,
     ) -> dict[str, Any]:
         """Index one path or multiple paths and optionally force a full rebuild."""
         if paths:
             source_paths = [Path(item) for item in paths]
-            return mcp_reindex_many(
-                resolved_db_path,
-                source_paths=source_paths,
-                force=force,
-                prune_missing=prune_missing,
+            return await anyio.to_thread.run_sync(
+                partial(
+                    mcp_reindex_many,
+                    resolved_db_path,
+                    source_paths=source_paths,
+                    force=force,
+                    prune_missing=prune_missing,
+                    background=background,
+                ),
             )
         source = Path(path) if path else Path.cwd()
-        return mcp_reindex(
-            resolved_db_path,
-            source_path=source,
-            force=force,
-            prune_missing=prune_missing,
+        return await anyio.to_thread.run_sync(
+            partial(
+                mcp_reindex,
+                resolved_db_path,
+                source_path=source,
+                force=force,
+                prune_missing=prune_missing,
+                background=background,
+            ),
         )
 
     return mcp
 
 
+def _configure_logging() -> None:
+    level_name = os.getenv("RIFLUX_LOG_LEVEL", "WARNING").upper()
+    level = getattr(logging, level_name, logging.WARNING)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
 def main() -> None:
+    _configure_logging()
     server = create_server()
     server.run()
 

@@ -8,6 +8,13 @@ import pytest
 from tests.helpers import write_search_fixture_corpus
 
 
+@pytest.fixture(autouse=True)
+def _clear_tools_caches() -> None:
+    """Reset module-level caches in mcp.tools between tests."""
+    from rifflux.mcp.tools import _clear_caches
+    _clear_caches()
+
+
 @pytest.fixture
 def schema_sql_path() -> Path:
     return Path(__file__).resolve().parents[1] / "src" / "rifflux" / "db" / "schema.sql"

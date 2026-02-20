@@ -64,6 +64,7 @@ def test_create_server_tool_wrappers_delegate_to_mcp_tools(monkeypatch, tmp_path
         source_path: Path,
         force: bool = False,
         prune_missing: bool = True,
+        background: bool = False,
     ) -> dict:
         calls["reindex"] = (db_path, source_path, force, prune_missing)
         return {"tool": "reindex"}
@@ -73,6 +74,7 @@ def test_create_server_tool_wrappers_delegate_to_mcp_tools(monkeypatch, tmp_path
         source_paths: list[Path],
         force: bool = False,
         prune_missing: bool = True,
+        background: bool = False,
     ) -> dict:
         calls["reindex_many"] = (db_path, source_paths, force, prune_missing)
         return {"tool": "reindex_many"}
