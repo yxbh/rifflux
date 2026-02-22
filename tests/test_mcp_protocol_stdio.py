@@ -24,7 +24,10 @@ async def _run_protocol_roundtrip(*, workspace: Path, db_path: Path, source_path
     env = os.environ.copy()
     env["RIFLUX_DB_PATH"] = str(db_path)
     env["RIFLUX_EMBEDDING_BACKEND"] = "hash"
-    env["PYTHONPATH"] = "src"
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"src{os.pathsep}{existing_pythonpath}" if existing_pythonpath else "src"
+    )
     env["PYTHONIOENCODING"] = "utf-8"
     params = StdioServerParameters(
         command=str(python_exe),
