@@ -177,6 +177,55 @@ blocking interactive calls:
 - Watcher auto-restarts on transient crashes (up to configured cap).
 - `index_status` reports job and watcher state.
 
+### Background job lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> queued: submit(reindex background)
+  queued --> running: worker picks next job
+  running --> completed: reindex succeeds
+  running --> retry_wait: transient SQLite lock/busy
+  retry_wait --> running: backoff elapsed (1s/2s/4s)
+  running --> failed: permanent error or retries exhausted
+  queued --> failed: shutdown cancels pending jobs
+  retry_wait --> failed: shutdown during retry wait
+  completed --> [*]
+  failed --> [*]
+```
+
+### File watcher event path
+
+```mermaid
+flowchart TD
+  FS[Filesystem events] --> Debounce[watchfiles debounce]
+  Debounce --> Filter["Apply include/exclude globs<br/>(path normalized + watch-root-relative)"]
+  Filter --> Relevant{Relevant changes?}
+  Relevant -- no --> Drop[Ignore batch]
+  Relevant -- yes --> Pending{"Matching reindex job<br/>already queued/running?"}
+  Pending -- yes --> Coalesce["Coalesce burst<br/>(skip redundant submit)"]
+  Pending -- no --> Submit[Submit one background reindex job]
+  Submit --> Queue[BackgroundIndexer queue]
+```
+
+### Shutdown sequence
+
+```mermaid
+sequenceDiagram
+  participant Exit as Process Exit
+  participant Tools as mcp.tools atexit
+  participant Watcher as FileWatcher
+  participant BG as BackgroundIndexer
+
+  Exit->>Tools: _shutdown_server()
+  Tools->>Watcher: stop()
+  Note over Watcher: Prevent new job submissions
+  Tools->>BG: shutdown(timeout)
+  Note over BG: Mark terminal shutdown state
+  Note over BG: Cancel queued jobs
+  Note over BG: Let running job finish or fail
+  BG-->>Tools: shutdown complete
+```
+
 ## Embedding Backend Decision (Pros/Cons)
 
 Rifflux uses ONNX as the primary semantic path, with `auto` runtime default

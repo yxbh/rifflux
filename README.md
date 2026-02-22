@@ -68,6 +68,55 @@ Rifflux supports a configurable embedding backend via environment variables:
 - `RIFLUX_FILE_WATCHER_PATHS=` (comma-separated directories to watch; required when watcher is enabled)
 - `RIFLUX_FILE_WATCHER_DEBOUNCE_MS=500` (minimum ms between FS event batches)
 
+### Environment variables reference
+
+| Variable | What it controls | Default | Example value |
+|---|---|---|---|
+| `RIFLUX_EMBEDDING_BACKEND` | Embedding backend strategy (`auto`, `onnx`, `hash`) | `auto` | `onnx` |
+| `RIFLUX_EMBEDDING_MODEL` | Preferred model label used by ONNX-capable path | `BAAI/bge-small-en-v1.5` | `BAAI/bge-small-en-v1.5` |
+| `RIFLUX_EMBEDDING_DIM` | Embedding vector dimension expected by runtime/store | `384` | `384` |
+| `RIFLUX_DB_PATH` | SQLite DB file location for index and embeddings | `.tmp/riflux/riflux.db` | `.tmp/riflux/my-index.db` |
+| `RIFLUX_INDEX_INCLUDE_GLOBS` | Comma-separated file patterns to include in indexing | `*.md` | `*.md,*.txt` |
+| `RIFLUX_INDEX_EXCLUDE_GLOBS` | Comma-separated file patterns to exclude from indexing | `.git/*,.venv/*,**/__pycache__/*,**/.pytest_cache/*,**/.ruff_cache/*,**/node_modules/*` | `.git/*,.venv/*,**/node_modules/*,build/*` |
+| `RIFLUX_AUTO_REINDEX_ON_SEARCH` | Whether search calls trigger incremental background refresh | `0` | `1` |
+| `RIFLUX_AUTO_REINDEX_PATHS` | Paths scanned when auto-reindex on search is enabled | `.` | `docs,notes` |
+| `RIFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS` | Minimum seconds between auto-reindex runs per DB | `2.0` | `10.0` |
+| `RIFLUX_FILE_WATCHER` | Whether filesystem watcher integration is enabled | `0` | `1` |
+| `RIFLUX_FILE_WATCHER_PATHS` | Comma-separated directories monitored by watcher | empty | `docs,knowledge-base` |
+| `RIFLUX_FILE_WATCHER_DEBOUNCE_MS` | Event debounce window before watcher emits a batch | `500` | `750` |
+| `RIFLUX_LOG_LEVEL` | Logging verbosity for CLI and MCP server | `WARNING` | `DEBUG` |
+
+### Example configurations
+
+Minimal deterministic local setup (hash backend):
+
+```bash
+RIFLUX_EMBEDDING_BACKEND=hash
+RIFLUX_DB_PATH=.tmp/riflux/riflux.db
+RIFLUX_LOG_LEVEL=INFO
+```
+
+Higher-quality semantic setup (ONNX preferred):
+
+```bash
+RIFLUX_EMBEDDING_BACKEND=onnx
+RIFLUX_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+RIFLUX_DB_PATH=.tmp/riflux/riflux.db
+RIFLUX_LOG_LEVEL=INFO
+```
+
+Auto-refresh + watcher setup for active docs workspace:
+
+```bash
+RIFLUX_EMBEDDING_BACKEND=auto
+RIFLUX_AUTO_REINDEX_ON_SEARCH=1
+RIFLUX_AUTO_REINDEX_PATHS=docs,notes
+RIFLUX_FILE_WATCHER=1
+RIFLUX_FILE_WATCHER_PATHS=docs,notes
+RIFLUX_FILE_WATCHER_DEBOUNCE_MS=500
+RIFLUX_LOG_LEVEL=DEBUG
+```
+
 Behavior:
 
 - `hash`: deterministic local hash embedder only
