@@ -17,7 +17,8 @@ dependencies = [
 [project.optional-dependencies]
 vector = ["sqlite-vec>=0.1.6"]
 onnx = ["fastembed>=0.3.6"]
-dev = ["pytest>=8.0", "ruff>=0.6"]
+watch = ["watchfiles>=1.0"]
+dev = ["pytest>=8.0", "ruff>=0.6", "watchfiles>=1.0"]
 
 [project.scripts]
 rifflux-mcp = "rifflux.mcp.server:main"

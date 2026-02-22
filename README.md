@@ -7,9 +7,15 @@ Rifflux is a local/offline retrieval engine for markdown and file content with h
 - score fusion via Reciprocal Rank Fusion (RRF)
 - MCP tool surface for agent workflows
 
+## Architecture docs
+
+- [Rifflux architecture, indexing flow, and MCP-vs-grep comparison](docs/rifflux-architecture-and-search.md)
+- [Fresh quantitative benchmark: MCP indexed search vs grep-style scan](docs/mcp-vs-grep-benchmark.md)
+- [Embedding backend decision record (why ONNX, alternatives, trade-offs)](docs/embedding-backend-decision.md)
+
 ## Status
 
-Starter scaffold is in place with deterministic chunking, indexing, hybrid retrieval, and MCP tool wiring.
+Core retrieval engine with deterministic chunking, incremental indexing, hybrid search (lexical + semantic + RRF), background indexing with retry, file watching, and MCP tool surface.
 
 ## Quick start
 
@@ -58,6 +64,58 @@ Rifflux supports a configurable embedding backend via environment variables:
 - `RIFLUX_AUTO_REINDEX_ON_SEARCH=0|1` (default `0`)
 - `RIFLUX_AUTO_REINDEX_PATHS=.` (comma-separated paths)
 - `RIFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS=2.0`
+- `RIFLUX_FILE_WATCHER=0|1` (default `0`)
+- `RIFLUX_FILE_WATCHER_PATHS=` (comma-separated directories to watch; required when watcher is enabled)
+- `RIFLUX_FILE_WATCHER_DEBOUNCE_MS=500` (minimum ms between FS event batches)
+
+### Environment variables reference
+
+| Variable | What it controls | Default | Example value |
+|---|---|---|---|
+| `RIFLUX_EMBEDDING_BACKEND` | Embedding backend strategy (`auto`, `onnx`, `hash`) | `auto` | `onnx` |
+| `RIFLUX_EMBEDDING_MODEL` | Preferred model label used by ONNX-capable path | `BAAI/bge-small-en-v1.5` | `BAAI/bge-small-en-v1.5` |
+| `RIFLUX_EMBEDDING_DIM` | Embedding vector dimension expected by runtime/store | `384` | `384` |
+| `RIFLUX_DB_PATH` | SQLite DB file location for index and embeddings | `.tmp/riflux/riflux.db` | `.tmp/riflux/my-index.db` |
+| `RIFLUX_INDEX_INCLUDE_GLOBS` | Comma-separated file patterns to include in indexing | `*.md` | `*.md,*.txt` |
+| `RIFLUX_INDEX_EXCLUDE_GLOBS` | Comma-separated file patterns to exclude from indexing | `.git/*,.venv/*,**/__pycache__/*,**/.pytest_cache/*,**/.ruff_cache/*,**/node_modules/*` | `.git/*,.venv/*,**/node_modules/*,build/*` |
+| `RIFLUX_AUTO_REINDEX_ON_SEARCH` | Whether search calls trigger incremental background refresh | `0` | `1` |
+| `RIFLUX_AUTO_REINDEX_PATHS` | Paths scanned when auto-reindex on search is enabled | `.` | `docs,notes` |
+| `RIFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS` | Minimum seconds between auto-reindex runs per DB | `2.0` | `10.0` |
+| `RIFLUX_FILE_WATCHER` | Whether filesystem watcher integration is enabled | `0` | `1` |
+| `RIFLUX_FILE_WATCHER_PATHS` | Comma-separated directories monitored by watcher | empty | `docs,knowledge-base` |
+| `RIFLUX_FILE_WATCHER_DEBOUNCE_MS` | Event debounce window before watcher emits a batch | `500` | `750` |
+| `RIFLUX_LOG_LEVEL` | Logging verbosity for CLI and MCP server | `WARNING` | `DEBUG` |
+
+### Example configurations
+
+Minimal deterministic local setup (hash backend):
+
+```bash
+RIFLUX_EMBEDDING_BACKEND=hash
+RIFLUX_DB_PATH=.tmp/riflux/riflux.db
+RIFLUX_LOG_LEVEL=INFO
+```
+
+Higher-quality semantic setup (ONNX preferred):
+
+```bash
+RIFLUX_EMBEDDING_BACKEND=onnx
+RIFLUX_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+RIFLUX_DB_PATH=.tmp/riflux/riflux.db
+RIFLUX_LOG_LEVEL=INFO
+```
+
+Auto-refresh + watcher setup for active docs workspace:
+
+```bash
+RIFLUX_EMBEDDING_BACKEND=auto
+RIFLUX_AUTO_REINDEX_ON_SEARCH=1
+RIFLUX_AUTO_REINDEX_PATHS=docs,notes
+RIFLUX_FILE_WATCHER=1
+RIFLUX_FILE_WATCHER_PATHS=docs,notes
+RIFLUX_FILE_WATCHER_DEBOUNCE_MS=500
+RIFLUX_LOG_LEVEL=DEBUG
+```
 
 Behavior:
 
@@ -66,6 +124,26 @@ Behavior:
 - `auto`: try ONNX path first, then hash fallback
 - indexing scope: include/exclude globs are applied by the MCP server during reindex
 - optional live refresh: if `RIFLUX_AUTO_REINDEX_ON_SEARCH=1`, each search performs incremental reindex over `RIFLUX_AUTO_REINDEX_PATHS` (throttled by `RIFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS`)
+
+### Embedding model choice
+
+For rationale and comparisons (including why ONNX is the primary semantic
+path and what alternatives were considered), see
+`docs/embedding-backend-decision.md`.
+
+Quick operational defaults:
+
+- `auto`: recommended default for mixed/dev environments.
+- `onnx`: preferred when semantic quality is a priority and setup is controlled.
+- `hash`: preferred for deterministic CI/minimal-setup workflows.
+
+File watcher:
+
+- When `RIFLUX_FILE_WATCHER=1` and `RIFLUX_FILE_WATCHER_PATHS` is set, Riflux monitors those paths for file changes and automatically triggers background reindex.
+- The watcher uses `watchfiles` (Rust-backed, cross-platform). Install with `pip install -e .[watch]` or `pip install -e .[dev]`.
+- Only files matching `RIFLUX_INDEX_INCLUDE_GLOBS` (and not excluded) trigger reindex jobs.
+- The watcher auto-restarts on transient OS errors (up to 5 consecutive crashes with exponential backoff).
+- The watcher starts lazily on the first search call, not at server startup.
 
 Schema-change policy:
 
@@ -98,6 +176,14 @@ Tip:
 To enable ONNX-capable backend support:
 
 - `pip install -e .[onnx]`
+
+## Background indexing and resilience
+
+Reindex jobs submitted via `background: true` or triggered by auto-reindex / file watcher run in a single sequential background thread.
+
+- **Retry on transient errors**: If a job fails with a transient SQLite error (`database is locked`, `database is busy`), it is retried up to 3 times with exponential backoff (1s, 2s, 4s). Non-transient errors fail immediately.
+- **Graceful shutdown**: On process exit (including VS Code killing the MCP server), `atexit` cleanup stops the file watcher, cancels queued jobs, and waits for any running job to finish.
+- **Job status**: `index_status` returns all background job details including `retries` count and `crash_restarts` from the file watcher.
 
 ## Layout
 
@@ -197,3 +283,5 @@ RIFLUX_LOG_LEVEL=DEBUG rifflux-query "cache ttl" --mode hybrid
 
 - If search or reindex fails with SQL errors like `no such column: vec` or FTS mismatch errors, rebuild the DB schema and reindex:
    - `rifflux-rebuild --path . --db .tmp/rifflux/rifflux.db`
+- If background reindex jobs fail with `database is locked`, they are automatically retried (up to 3 times). Check `index_status` for job details and retry counts.
+- If the file watcher stops unexpectedly, it auto-restarts with backoff. After 5 consecutive crashes it gives up — check logs at `RIFLUX_LOG_LEVEL=DEBUG`.

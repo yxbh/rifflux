@@ -112,7 +112,10 @@ def test_mcp_streamable_http_protocol_roundtrip(
     env = os.environ.copy()
     env["RIFLUX_DB_PATH"] = str(db_path)
     env["RIFLUX_EMBEDDING_BACKEND"] = "hash"
-    env["PYTHONPATH"] = "src"
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"src{os.pathsep}{existing_pythonpath}" if existing_pythonpath else "src"
+    )
 
     server_code = (
         "from rifflux.mcp.server import create_server; "

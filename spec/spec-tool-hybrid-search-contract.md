@@ -148,6 +148,7 @@ Output contract:
 | `mode` | string | Yes | Applied retrieval mode |
 | `count` | integer | Yes | Number of returned results |
 | `embedding_model` | string | Yes | Active embedding model label |
+| `auto_reindex` | object/null | Yes | Auto-reindex execution metadata (`enabled`, `executed`, reason/job fields) |
 | `results` | array | Yes | Search result objects |
 
 ### 4.5 MCP Tool Contract (`reindex`)
@@ -159,6 +160,8 @@ Input contract:
 | `path` | string/null | No | server current working directory (when `paths` omitted) |
 | `paths` | array[string]/null | No | none |
 | `force` | boolean | No | `false` |
+| `prune_missing` | boolean | No | `true` |
+| `background` | boolean | No | `false` |
 
 Input precedence rules:
 - If `paths` is provided and non-empty, `path` is ignored.
@@ -171,9 +174,23 @@ Output contract:
 |---|---|---|---|
 | `indexed_files` | integer | Yes | Total indexed file count across all processed locations |
 | `skipped_files` | integer | Yes | Total skipped file count across all processed locations |
+| `deleted_files` | integer | Yes | Number of indexed files removed when `prune_missing=true` |
 | `indexed_paths` | array[string] | Conditional | Present for multi-location aggregation path |
 | `embedding_model` | string | Yes | Active embedding model label |
 | `embedding_backend` | string | Yes | Active embedding backend identifier |
+| `prune_missing` | boolean | Yes | Echoes prune behavior applied to this call |
+| `git_fingerprint` | object/null | Yes | Git metadata for indexed worktree(s), when available |
+
+When `background=true`, `reindex` returns job metadata instead of immediate indexing counts:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | string | Yes | Background job identifier |
+| `status` | string | Yes | `queued`, `running`, `completed`, or `failed` |
+| `elapsed_seconds` | number/null | Yes | Elapsed runtime when available |
+| `result` | object/null | Yes | Result payload on completion |
+| `error` | string/null | Yes | Error message on failure |
+| `retries` | integer | Yes | Retry count used by background worker |
 
 ## 5. Acceptance Criteria
 
