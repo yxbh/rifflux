@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from functools import partial
 from pathlib import Path
 
@@ -149,8 +150,38 @@ def test_main_runs_created_server(monkeypatch) -> None:
         def run(self) -> None:
             state["ran"] = True
 
+    class FakeParser:
+        def parse_args(self) -> argparse.Namespace:
+            return argparse.Namespace(db=None, watch_path=[])
+
+    monkeypatch.setattr(mcp_server, "_server_parser", lambda: FakeParser())
     monkeypatch.setattr(mcp_server, "create_server", lambda: FakeServer())
 
     mcp_server.main()
 
     assert state["ran"] is True
+
+
+def test_main_applies_watch_path_cli_overrides(monkeypatch) -> None:
+    state = {"ran": False}
+
+    class FakeServer:
+        def run(self) -> None:
+            state["ran"] = True
+
+    class FakeParser:
+        def parse_args(self) -> argparse.Namespace:
+            return argparse.Namespace(db="tmp/custom.db", watch_path=["docs", "notes"])
+
+    monkeypatch.delenv("RIFFLUX_DB_PATH", raising=False)
+    monkeypatch.delenv("RIFFLUX_FILE_WATCHER", raising=False)
+    monkeypatch.delenv("RIFFLUX_FILE_WATCHER_PATHS", raising=False)
+    monkeypatch.setattr(mcp_server, "_server_parser", lambda: FakeParser())
+    monkeypatch.setattr(mcp_server, "create_server", lambda: FakeServer())
+
+    mcp_server.main()
+
+    assert state["ran"] is True
+    assert mcp_server.os.environ["RIFFLUX_DB_PATH"] == "tmp/custom.db"
+    assert mcp_server.os.environ["RIFFLUX_FILE_WATCHER"] == "1"
+    assert mcp_server.os.environ["RIFFLUX_FILE_WATCHER_PATHS"] == "docs,notes"

@@ -171,6 +171,7 @@ Rifflux MCP defaults are environment-variable driven.
 - Preferred configuration surface: environment variables (especially when launched by MCP hosts).
 - If `RIFFLUX_DB_PATH` is omitted, DB files are created under `.tmp/rifflux/`.
 - Relative paths are resolved from the MCP server process working directory.
+- For local/manual launches, `python -m rifflux.mcp.server` also accepts repeatable `--watch-path` args.
 
 Example environment setup:
 
@@ -181,6 +182,14 @@ Example environment setup:
 Tip:
 
 - Use an absolute `RIFFLUX_DB_PATH` if your MCP host runs from a different working directory than expected.
+
+CLI watcher-path override example (repeatable):
+
+```bash
+python -m rifflux.mcp.server --db .tmp/rifflux/rifflux.db --watch-path docs --watch-path notes
+```
+
+When one or more `--watch-path` values are provided, Rifflux enables file watching for those paths for that process.
 
 To enable ONNX-capable backend support:
 

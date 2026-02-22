@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 from functools import partial
@@ -142,7 +143,31 @@ def _configure_logging() -> None:
     )
 
 
+def _server_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run rifflux MCP server.")
+    parser.add_argument("--db", default=None, help="Optional DB path override")
+    parser.add_argument(
+        "--watch-path",
+        action="append",
+        default=[],
+        help="Directory to watch for auto-reindex (repeatable)",
+    )
+    return parser
+
+
+def _apply_cli_overrides(args: argparse.Namespace) -> None:
+    if args.db:
+        os.environ["RIFFLUX_DB_PATH"] = args.db
+
+    watch_paths = [str(Path(path)) for path in args.watch_path if str(path).strip()]
+    if watch_paths:
+        os.environ["RIFFLUX_FILE_WATCHER"] = "1"
+        os.environ["RIFFLUX_FILE_WATCHER_PATHS"] = ",".join(watch_paths)
+
+
 def main() -> None:
+    args = _server_parser().parse_args()
+    _apply_cli_overrides(args)
     _configure_logging()
     server = create_server()
     server.run()
