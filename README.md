@@ -53,7 +53,7 @@ Core retrieval engine with deterministic chunking, incremental indexing, hybrid 
 
 ## Embedding backend toggle
 
-Rifflux supports a configurable embedding backend via environment variables:
+Rifflux embedding behavior is controlled by `RIFFLUX_*` environment variables.
 
 - Canonical prefix: `RIFFLUX_*`
 - `RIFFLUX_EMBEDDING_BACKEND=auto|onnx|hash` (default `auto`)
@@ -97,7 +97,7 @@ RIFFLUX_DB_PATH=.tmp/riflux/rifflux.db
 RIFFLUX_LOG_LEVEL=INFO
 ```
 
-Higher-quality semantic setup (ONNX preferred):
+Higher-quality semantic setup (ONNX-focused):
 
 ```bash
 RIFFLUX_EMBEDDING_BACKEND=onnx
@@ -121,26 +121,34 @@ RIFFLUX_LOG_LEVEL=DEBUG
 Behavior:
 
 - `hash`: deterministic local hash embedder only
-- `onnx`: ONNX-capable embedder path via optional dependency, falls back to hash if unavailable
+- `onnx`: ONNX-capable embedder path via optional dependency; falls back to hash if unavailable
 - `auto`: try ONNX path first, then hash fallback
-- indexing scope: include/exclude globs are applied by the MCP server during reindex
-- optional live refresh: if `RIFFLUX_AUTO_REINDEX_ON_SEARCH=1`, each search performs incremental reindex over `RIFFLUX_AUTO_REINDEX_PATHS` (throttled by `RIFFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS`)
+- include/exclude globs are applied during MCP reindex operations
+- optional live refresh: when `RIFFLUX_AUTO_REINDEX_ON_SEARCH=1`, searches trigger incremental reindex over `RIFFLUX_AUTO_REINDEX_PATHS` (throttled by `RIFFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS`)
 
 ### Embedding model choice
 
-For rationale and comparisons (including why ONNX is the primary semantic
-path and what alternatives were considered), see
-`docs/embedding-backend-decision.md`.
+Default recommendation:
 
-Quick operational defaults:
+- `RIFFLUX_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5`
+- `RIFFLUX_EMBEDDING_BACKEND=auto`
 
-- `auto`: recommended default for mixed/dev environments.
-- `onnx`: preferred when semantic quality is a priority and setup is controlled.
-- `hash`: preferred for deterministic CI/minimal-setup workflows.
+Backend selection:
+
+- `auto`: best general default for mixed/dev environments.
+- `onnx`: use when semantic quality is the priority and setup is controlled.
+- `hash`: use for deterministic CI or minimal-setup workflows.
+
+When changing models:
+
+- Keep `RIFFLUX_EMBEDDING_DIM` aligned to the model output dimension (default `384`).
+- Reindex after changing `RIFFLUX_EMBEDDING_MODEL` to keep index/query vectors consistent.
+
+For deeper rationale and trade-offs, see `docs/embedding-backend-decision.md`.
 
 File watcher:
 
-- When `RIFFLUX_FILE_WATCHER=1` and `RIFFLUX_FILE_WATCHER_PATHS` is set, Riflux monitors those paths for file changes and automatically triggers background reindex.
+- When `RIFFLUX_FILE_WATCHER=1` and `RIFFLUX_FILE_WATCHER_PATHS` is set, Riflux monitors those paths and auto-submits background reindex jobs.
 - The watcher uses `watchfiles` (Rust-backed, cross-platform). Install with `pip install -e .[watch]` or `pip install -e .[dev]`.
 - Only files matching `RIFFLUX_INDEX_INCLUDE_GLOBS` (and not excluded) trigger reindex jobs.
 - The watcher auto-restarts on transient OS errors (up to 5 consecutive crashes with exponential backoff).
