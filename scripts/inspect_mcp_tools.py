@@ -24,9 +24,9 @@ def _build_parameters(db_path: str | None) -> StdioServerParameters:
         "PYTHONPATH": "src",
     }
     if db_path:
-        env["RIFLUX_DB_PATH"] = db_path
-    if backend := os.getenv("RIFLUX_EMBEDDING_BACKEND"):
-        env["RIFLUX_EMBEDDING_BACKEND"] = backend
+        env["RIFFLUX_DB_PATH"] = db_path
+    if backend := os.getenv("RIFFLUX_EMBEDDING_BACKEND"):
+        env["RIFFLUX_EMBEDDING_BACKEND"] = backend
 
     return StdioServerParameters(
         command=str(python_exe),
@@ -73,7 +73,7 @@ def main() -> None:
     parser.add_argument(
         "--db-path",
         default=None,
-        help="Optional database path to pass as RIFLUX_DB_PATH.",
+        help="Optional database path to pass as RIFFLUX_DB_PATH.",
     )
     parser.add_argument(
         "--pretty",

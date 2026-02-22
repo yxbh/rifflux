@@ -14,7 +14,7 @@ async def _call_tool(service, name: str, arguments: dict) -> dict:
 
 
 def test_create_server_registers_tools_with_schema_metadata(monkeypatch) -> None:
-    monkeypatch.setenv("RIFLUX_DB_PATH", "env-rifflux.db")
+    monkeypatch.setenv("RIFFLUX_DB_PATH", "env-rifflux.db")
 
     service = mcp_server.create_server()
 

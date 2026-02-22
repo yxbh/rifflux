@@ -11,7 +11,7 @@ from rifflux.mcp.tools import reindex, search_rifflux
 
 
 def _configure_logging() -> None:
-    level_name = os.getenv("RIFLUX_LOG_LEVEL", "WARNING").upper()
+    level_name = os.getenv("RIFFLUX_LOG_LEVEL", "WARNING").upper()
     level = getattr(logging, level_name, logging.WARNING)
     logging.basicConfig(
         level=level,

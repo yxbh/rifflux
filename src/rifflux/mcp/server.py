@@ -22,7 +22,7 @@ from rifflux.mcp.tools import (
 
 
 def create_server(db_path: Path | None = None) -> FastMCP:
-    configured_db = Path(os.getenv("RIFLUX_DB_PATH", str(RiffluxConfig.from_env().db_path)))
+    configured_db = Path(os.getenv("RIFFLUX_DB_PATH", str(RiffluxConfig.from_env().db_path)))
     resolved_db_path = db_path or configured_db
     mcp = FastMCP("rifflux")
 
@@ -133,7 +133,7 @@ def create_server(db_path: Path | None = None) -> FastMCP:
 
 
 def _configure_logging() -> None:
-    level_name = os.getenv("RIFLUX_LOG_LEVEL", "WARNING").upper()
+    level_name = os.getenv("RIFFLUX_LOG_LEVEL", "WARNING").upper()
     level = getattr(logging, level_name, logging.WARNING)
     logging.basicConfig(
         level=level,

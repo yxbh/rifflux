@@ -1,0 +1,25 @@
+{
+    "servers": {
+        "rifflux": {
+            "type": "stdio",
+            "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "args": [
+                "-m",
+                "rifflux.mcp.server"
+            ],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "RIFFLUX_DB_PATH": "${workspaceFolder}/rifflux.db",
+                "RIFFLUX_EMBEDDING_BACKEND": "hash",
+                "RIFFLUX_AUTO_REINDEX_ON_SEARCH": "1",
+                "RIFFLUX_AUTO_REINDEX_PATHS": "${workspaceFolder}",
+                "RIFFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS": "1.0",
+                "RIFFLUX_LOG_LEVEL": "DEBUG"
+            },
+            "dev": {
+                "watch": "${workspaceFolder}/src/**/*.py",
+                "debug": true
+            }
+        }
+    }
+}

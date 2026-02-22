@@ -52,7 +52,7 @@ def _raise_with_rebuild_hint(
     detail = str(exc).strip() or "sqlite operational error"
     hint = (
         f"{detail}. If this is due to a schema mismatch, rebuild the DB: "
-        f"`riflux-rebuild --path {source_arg} --db {target_db}` "
+        f"`rifflux-rebuild --path {source_arg} --db {target_db}` "
         f"(or `python scripts/rebuild.py --path {source_arg} --db {target_db}`)."
     )
     raise RuntimeError(hint) from exc

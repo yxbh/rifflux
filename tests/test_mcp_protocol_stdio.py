@@ -22,8 +22,8 @@ from tests.helpers import (
 async def _run_protocol_roundtrip(*, workspace: Path, db_path: Path, source_path: Path) -> None:
     python_exe = workspace / ".venv" / "Scripts" / "python.exe"
     env = os.environ.copy()
-    env["RIFLUX_DB_PATH"] = str(db_path)
-    env["RIFLUX_EMBEDDING_BACKEND"] = "hash"
+    env["RIFFLUX_DB_PATH"] = str(db_path)
+    env["RIFFLUX_EMBEDDING_BACKEND"] = "hash"
     existing_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = (
         f"src{os.pathsep}{existing_pythonpath}" if existing_pythonpath else "src"
@@ -106,7 +106,7 @@ def test_mcp_stdio_protocol_roundtrip(
     workspace = Path(__file__).resolve().parents[1]
     db_path = make_db_path("protocol-test.db")
     source_path = fixture_corpus_path
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
 
     reindex_result = reindex(db_path=db_path, source_path=source_path, force=True)
     assert reindex_result["indexed_files"] >= 1

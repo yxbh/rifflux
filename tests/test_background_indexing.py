@@ -114,7 +114,7 @@ def test_reindex_background_returns_job_immediately(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
 
     source = tmp_path / "src"
     source.mkdir()
@@ -140,7 +140,7 @@ def test_reindex_many_background(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
 
     sa = tmp_path / "sa"
     sb = tmp_path / "sb"
@@ -171,7 +171,7 @@ def test_reindex_blocking_still_works(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
 
     source = tmp_path / "src"
     source.mkdir()
@@ -189,7 +189,7 @@ def test_index_status_includes_background_jobs(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
 
     source = tmp_path / "src"
     source.mkdir()
