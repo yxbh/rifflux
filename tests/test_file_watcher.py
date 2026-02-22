@@ -344,11 +344,11 @@ def test_index_status_includes_watcher_info(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
     # Patch FileWatcher.start to avoid real FS watching.
     monkeypatch.setattr(FileWatcher, "start", lambda self: None)
-    monkeypatch.setenv("RIFLUX_FILE_WATCHER", "1")
-    monkeypatch.setenv("RIFLUX_FILE_WATCHER_PATHS", str(tmp_path))
+    monkeypatch.setenv("RIFFLUX_FILE_WATCHER", "1")
+    monkeypatch.setenv("RIFFLUX_FILE_WATCHER_PATHS", str(tmp_path))
 
     source = tmp_path / "docs"
     source.mkdir()
@@ -370,7 +370,7 @@ def test_index_status_shows_disabled_when_no_watcher(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
     # File watcher not enabled.
 
     source = tmp_path / "docs"

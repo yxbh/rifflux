@@ -21,7 +21,7 @@ def indexed_db(
     make_db_path: Callable[[str], Path],
     monkeypatch,
 ) -> Path:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
     db_path = make_db_path("parallel.db")
     reindex(db_path=db_path, source_path=fixture_corpus_path, force=True)
     return db_path

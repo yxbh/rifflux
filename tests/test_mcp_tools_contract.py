@@ -20,7 +20,7 @@ def test_mcp_tool_contracts_end_to_end(
     make_db_path: Callable[[str], Path],
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
 
     source_path = fixture_corpus_path
     db_path = make_db_path("rifflux-tools.db")
@@ -70,7 +70,7 @@ def test_reindex_many_supports_multiple_input_locations(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
 
     db_path = make_db_path("rifflux-tools-many.db")
     source_a = tmp_path / "source-a"
@@ -96,7 +96,7 @@ def test_reindex_many_prunes_stale_files(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
 
     db_path = make_db_path("rifflux-tools-prune.db")
     source = tmp_path / "source"
@@ -123,7 +123,7 @@ def test_reindex_many_can_disable_stale_pruning(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
 
     db_path = make_db_path("rifflux-tools-no-prune.db")
     source = tmp_path / "source"
@@ -155,9 +155,9 @@ def test_reindex_many_respects_configured_exclude_globs(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
-    monkeypatch.setenv("RIFLUX_INDEX_INCLUDE_GLOBS", "*.md")
-    monkeypatch.setenv("RIFLUX_INDEX_EXCLUDE_GLOBS", ".venv/*")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_INDEX_INCLUDE_GLOBS", "*.md")
+    monkeypatch.setenv("RIFFLUX_INDEX_EXCLUDE_GLOBS", ".venv/*")
 
     db_path = make_db_path("rifflux-tools-exclude.db")
     source = tmp_path / "source"
@@ -190,7 +190,7 @@ def test_operational_error_includes_rebuild_hint(
         index_status(db_path=db_path)
 
     message = str(exc_info.value)
-    assert "riflux-rebuild" in message
+    assert "rifflux-rebuild" in message
     assert str(db_path) in message
 
 
@@ -199,9 +199,9 @@ def test_search_can_auto_reindex_when_enabled(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("RIFLUX_EMBEDDING_BACKEND", "hash")
-    monkeypatch.setenv("RIFLUX_AUTO_REINDEX_ON_SEARCH", "1")
-    monkeypatch.setenv("RIFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS", "0")
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
+    monkeypatch.setenv("RIFFLUX_AUTO_REINDEX_ON_SEARCH", "1")
+    monkeypatch.setenv("RIFFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS", "0")
 
     source = tmp_path / "source"
     source.mkdir(parents=True, exist_ok=True)
@@ -213,7 +213,7 @@ def test_search_can_auto_reindex_when_enabled(
         "cache ttl policy repeated for chunk sizing coverage.",
         encoding="utf-8",
     )
-    monkeypatch.setenv("RIFLUX_AUTO_REINDEX_PATHS", str(source))
+    monkeypatch.setenv("RIFFLUX_AUTO_REINDEX_PATHS", str(source))
 
     db_path = make_db_path("rifflux-tools-auto-reindex.db")
 
