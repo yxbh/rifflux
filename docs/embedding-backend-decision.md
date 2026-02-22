@@ -62,6 +62,33 @@ higher quality where available.
   hosts.
 - Use `auto` when you need robust behavior across mixed environments.
 
+## Specific ONNX Model Guidance
+
+Current recommended model for Rifflux:
+
+- `BAAI/bge-small-en-v1.5` (default)
+
+Why this is the default:
+
+- Good semantic quality for local hybrid retrieval at modest runtime cost.
+- Works well with the current default embedding dimension (`384`).
+- Reasonable local operational footprint for Python-first/offline workflows.
+
+How to choose a model in practice:
+
+- Stay on `BAAI/bge-small-en-v1.5` unless you have a measured reason to
+  change.
+- If you change `RIFFLUX_EMBEDDING_MODEL`, keep `RIFFLUX_EMBEDDING_DIM`
+  aligned with the model's native output dimension whenever possible.
+- Reindex after model changes so stored vectors are consistent with query-time
+  embeddings.
+
+Important implementation note:
+
+- Rifflux normalizes vectors and force-fits dimensions to
+  `RIFFLUX_EMBEDDING_DIM` (truncate/pad). Using a model with a mismatched
+  native dimension can degrade retrieval quality.
+
 ## Future Revisit Criteria
 
 Re-evaluate backend choice if one of these changes materially:
