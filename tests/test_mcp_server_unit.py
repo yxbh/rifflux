@@ -44,6 +44,7 @@ def test_create_server_tool_wrappers_delegate_to_mcp_tools(monkeypatch, tmp_path
         query: str,
         top_k: int = 10,
         mode: str = "hybrid",
+        expand: bool = False,
     ) -> dict:
         calls["search"] = (db_path, query, top_k, mode)
         return {"tool": "search"}

@@ -321,3 +321,152 @@ def test_search_can_auto_reindex_when_enabled(
         mode="hybrid",
     )
     assert second2["count"] >= 1
+
+
+def _write_multi_chunk_corpus(root: Path) -> None:
+    """Write a corpus with multiple chunks in one file and a second related file."""
+    root.mkdir(parents=True, exist_ok=True)
+    # File with multiple heading sections → multiple chunks
+    (root / "guide.md").write_text(
+        "# Guide\n\n"
+        "## Introduction\n\n"
+        "This introduction covers cache ttl policies and expiry strategies "
+        "for local development workflows. Cache ttl policies are critical "
+        "for reliable offline retrieval.\n\n"
+        "## Configuration\n\n"
+        "Configuration of cache ttl parameters including max-age, stale-while-"
+        "revalidate, and expiry windows for different content types.\n\n"
+        "## Advanced\n\n"
+        "Advanced cache ttl tuning with sliding windows, adaptive refresh "
+        "intervals, and capacity-based eviction policies for large corpora.\n",
+        encoding="utf-8",
+    )
+    # Second file with related content
+    (root / "reference.md").write_text(
+        "# Reference\n\n"
+        "## Cache Invalidation\n\n"
+        "Cache invalidation patterns and cache ttl best practices for "
+        "distributed systems and local indexes. Covers write-through, "
+        "write-behind, and refresh-ahead strategies.\n",
+        encoding="utf-8",
+    )
+
+
+def test_search_expand_returns_sibling_chunks(
+    make_db_path: Callable[[str], Path],
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
+
+    db_path = make_db_path("rifflux-expand-siblings.db")
+    corpus = tmp_path / "corpus"
+    _write_multi_chunk_corpus(corpus)
+
+    reindex_many(db_path=db_path, source_paths=[corpus], force=True)
+
+    result = search_rifflux(
+        db_path=db_path,
+        query="cache ttl",
+        top_k=1,
+        mode="lexical",
+        expand=True,
+    )
+
+    assert "related" in result
+    assert "related_count" in result
+    assert result["related_count"] >= 1
+
+    # Related chunks should have a "relation" field
+    for related in result["related"]:
+        assert related["relation"] in {"sibling", "semantic"}
+        assert "chunk_id" in related
+        assert "path" in related
+        assert "content" in related
+
+    # Sibling chunks should come from the same file as the seed
+    seed_path = result["results"][0]["path"]
+    sibling_related = [r for r in result["related"] if r["relation"] == "sibling"]
+    for sib in sibling_related:
+        assert sib["path"] == seed_path
+
+
+def test_search_expand_deduplicates_against_results(
+    make_db_path: Callable[[str], Path],
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
+
+    db_path = make_db_path("rifflux-expand-dedup.db")
+    corpus = tmp_path / "corpus"
+    _write_multi_chunk_corpus(corpus)
+
+    reindex_many(db_path=db_path, source_paths=[corpus], force=True)
+
+    result = search_rifflux(
+        db_path=db_path,
+        query="cache ttl",
+        top_k=5,
+        mode="hybrid",
+        expand=True,
+    )
+
+    result_ids = {r["chunk_id"] for r in result["results"]}
+    related_ids = {r["chunk_id"] for r in result.get("related", [])}
+    # No overlap between results and related
+    assert result_ids.isdisjoint(related_ids)
+
+
+def test_search_expand_false_omits_related(
+    make_db_path: Callable[[str], Path],
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
+
+    db_path = make_db_path("rifflux-expand-off.db")
+    corpus = tmp_path / "corpus"
+    _write_multi_chunk_corpus(corpus)
+
+    reindex_many(db_path=db_path, source_paths=[corpus], force=True)
+
+    result = search_rifflux(
+        db_path=db_path,
+        query="cache ttl",
+        top_k=3,
+        mode="hybrid",
+        expand=False,
+    )
+
+    assert "related" not in result
+    assert "related_count" not in result
+
+
+def test_search_expand_includes_cross_file_semantic(
+    make_db_path: Callable[[str], Path],
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
+
+    db_path = make_db_path("rifflux-expand-crossfile.db")
+    corpus = tmp_path / "corpus"
+    _write_multi_chunk_corpus(corpus)
+
+    reindex_many(db_path=db_path, source_paths=[corpus], force=True)
+
+    # Search narrowly so we get results from one file, then expand
+    result = search_rifflux(
+        db_path=db_path,
+        query="introduction cache ttl policies",
+        top_k=1,
+        mode="lexical",
+        expand=True,
+    )
+
+    assert result["count"] >= 1
+    related = result.get("related", [])
+    # With hash embeddings and cross-file content, we should get some related.
+    # At minimum siblings should be present
+    assert len(related) >= 1

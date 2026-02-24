@@ -33,6 +33,11 @@ EXPECTED_MCP_TOOL_PARAM_DESCRIPTIONS = {
         "query": "Natural-language query to search indexed content.",
         "top_k": "Maximum number of results to return (1-100).",
         "mode": "Retrieval mode: lexical, semantic, or hybrid.",
+        "expand": (
+            "When true, return a 'related' list of 2nd-degree chunks: "
+            "sibling chunks from the same file and semantically similar "
+            "chunks from other files."
+        ),
     },
     "get_chunk": {
         "chunk_id": "Stable chunk identifier returned by search results.",
