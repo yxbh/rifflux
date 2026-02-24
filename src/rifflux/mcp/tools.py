@@ -356,7 +356,7 @@ def search_rifflux(
                 "auto_reindex": auto_reindex,
                 "results": results,
             }
-            if expand and results:
+            if expand:
                 related = search.expand(results)
                 response["related"] = related
                 response["related_count"] = len(related)

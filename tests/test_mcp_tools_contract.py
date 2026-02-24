@@ -387,6 +387,7 @@ def test_search_expand_returns_sibling_chunks(
     # Sibling chunks should come from the same file as the seed
     seed_path = result["results"][0]["path"]
     sibling_related = [r for r in result["related"] if r["relation"] == "sibling"]
+    assert len(sibling_related) >= 1
     for sib in sibling_related:
         assert sib["path"] == seed_path
 
@@ -467,6 +468,36 @@ def test_search_expand_includes_cross_file_semantic(
 
     assert result["count"] >= 1
     related = result.get("related", [])
-    # With hash embeddings and cross-file content, we should get some related.
-    # At minimum siblings should be present
     assert len(related) >= 1
+
+    seed_path = result["results"][0]["path"]
+    semantic_related = [r for r in related if r["relation"] == "semantic"]
+    assert len(semantic_related) >= 1
+    for semantic in semantic_related:
+        assert semantic["path"] != seed_path
+
+
+def test_search_expand_true_includes_empty_related_when_no_results(
+    make_db_path: Callable[[str], Path],
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
+
+    db_path = make_db_path("rifflux-expand-empty.db")
+    corpus = tmp_path / "corpus"
+    _write_multi_chunk_corpus(corpus)
+
+    reindex_many(db_path=db_path, source_paths=[corpus], force=True)
+
+    result = search_rifflux(
+        db_path=db_path,
+        query="query-without-any-hits-xyzzy",
+        top_k=3,
+        mode="lexical",
+        expand=True,
+    )
+
+    assert result["count"] == 0
+    assert result["related"] == []
+    assert result["related_count"] == 0

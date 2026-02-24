@@ -155,6 +155,8 @@ class SearchService:
                 for neighbor in neighbors:
                     if neighbor["chunk_id"] in seen_ids:
                         continue
+                    if neighbor["path"] == seed["path"]:
+                        continue
                     seen_ids.add(neighbor["chunk_id"])
                     cross_file.append({
                         "chunk_id": neighbor["chunk_id"],
