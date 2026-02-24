@@ -58,11 +58,12 @@ class Indexer:
 
         for file_path in file_candidates:
             rel = normalize_path(str(file_path.relative_to(source_root)))
+            abs_path = normalize_path(str(file_path.resolve()))
             if not self._is_included(rel) or self._is_excluded(rel):
                 continue
-            seen_paths.append(rel)
+            seen_paths.append(abs_path)
             stat = file_path.stat()
-            existing = file_meta_map.get(rel)
+            existing = file_meta_map.get(abs_path)
 
             # Fast path: mtime + size unchanged → skip without reading file
             if (
@@ -71,7 +72,7 @@ class Indexer:
                 and int(existing["mtime_ns"]) == int(stat.st_mtime_ns)
                 and int(existing["size_bytes"]) == int(stat.st_size)
             ):
-                logger.debug("skip (stat match) %s", rel)
+                logger.debug("skip (stat match) %s", abs_path)
                 skipped += 1
                 continue
 
@@ -86,9 +87,9 @@ class Indexer:
                 and existing
                 and str(existing["sha256"]) == sha256
             ):
-                logger.debug("skip (hash match, stat updated) %s", rel)
+                logger.debug("skip (hash match, stat updated) %s", abs_path)
                 self.store.upsert_file(
-                    path=rel,
+                    path=abs_path,
                     mtime_ns=int(stat.st_mtime_ns),
                     size_bytes=int(stat.st_size),
                     sha256=sha256,
@@ -98,7 +99,7 @@ class Indexer:
 
             t_file = time.perf_counter()
             file_id = self.store.upsert_file(
-                path=rel,
+                path=abs_path,
                 mtime_ns=int(stat.st_mtime_ns),
                 size_bytes=int(stat.st_size),
                 sha256=sha256,
@@ -107,7 +108,7 @@ class Indexer:
             text = content_bytes.decode("utf-8")
             chunks = chunk_markdown(
                 text,
-                rel,
+                abs_path,
                 max_chunk_chars=self.max_chunk_chars,
                 min_chunk_chars=self.min_chunk_chars,
             )
@@ -127,7 +128,7 @@ class Indexer:
                 )
 
             dt_file = time.perf_counter() - t_file
-            logger.debug("indexed %s chunks=%d in %.3fs", rel, len(chunks), dt_file)
+            logger.debug("indexed %s chunks=%d in %.3fs", abs_path, len(chunks), dt_file)
             indexed += 1
         self.store.commit()
         dt = time.perf_counter() - t_start

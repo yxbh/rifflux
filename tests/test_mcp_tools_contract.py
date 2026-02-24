@@ -54,6 +54,7 @@ def test_mcp_tool_contracts_end_to_end(
         "content",
         "score_breakdown",
     }.issubset(first)
+    assert Path(first["path"]).is_absolute()
 
     chunk = get_chunk(db_path=db_path, chunk_id=first["chunk_id"])
     assert "chunk" in chunk
@@ -89,6 +90,49 @@ def test_reindex_many_supports_multiple_input_locations(
     assert len(result["indexed_paths"]) == 2
     assert "embedding_model" in result
     assert "git_fingerprint" in result
+
+
+def test_search_returns_absolute_paths_for_multi_root_indexes(
+    make_db_path: Callable[[str], Path],
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
+
+    db_path = make_db_path("rifflux-tools-absolute-paths.db")
+    source_a = tmp_path / "source-a"
+    source_b = tmp_path / "source-b"
+    source_a.mkdir(parents=True, exist_ok=True)
+    source_b.mkdir(parents=True, exist_ok=True)
+
+    file_a = source_a / "shared.md"
+    file_b = source_b / "shared.md"
+    file_a.write_text(
+        "# A\n\n"
+        "cache ttl policy in source a repeated for chunk sizing coverage. "
+        "cache ttl policy in source a repeated for chunk sizing coverage. "
+        "cache ttl policy in source a repeated for chunk sizing coverage.",
+        encoding="utf-8",
+    )
+    file_b.write_text(
+        "# B\n\n"
+        "cache ttl policy in source b repeated for chunk sizing coverage. "
+        "cache ttl policy in source b repeated for chunk sizing coverage. "
+        "cache ttl policy in source b repeated for chunk sizing coverage.",
+        encoding="utf-8",
+    )
+
+    reindex_many(db_path=db_path, source_paths=[source_a, source_b], force=True)
+
+    search = search_rifflux(db_path=db_path, query="cache ttl policy", top_k=10, mode="lexical")
+    assert search["count"] == 2
+
+    returned_paths = {row["path"] for row in search["results"]}
+    expected_paths = {
+        str(file_a.resolve()).replace("\\", "/"),
+        str(file_b.resolve()).replace("\\", "/"),
+    }
+    assert returned_paths == expected_paths
 
 
 def test_reindex_many_prunes_stale_files(
@@ -173,6 +217,28 @@ def test_reindex_many_respects_configured_exclude_globs(
     assert status["files"] == 1
     assert status["index_include_globs"] == ["*.md"]
     assert status["index_exclude_globs"] == [".venv/*"]
+
+
+def test_reindex_many_excludes_tmp_by_default(
+    make_db_path: Callable[[str], Path],
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("RIFFLUX_EMBEDDING_BACKEND", "hash")
+
+    db_path = make_db_path("rifflux-tools-default-tmp-exclude.db")
+    source = tmp_path / "source"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "keep.md").write_text("# Keep\n\ncache ttl", encoding="utf-8")
+    (source / ".tmp").mkdir(parents=True, exist_ok=True)
+    (source / ".tmp" / "skip.md").write_text("# Skip\n\nbenchmark corpus", encoding="utf-8")
+
+    result = reindex_many(db_path=db_path, source_paths=[source], force=True)
+    assert result["indexed_files"] == 1
+
+    status = index_status(db_path=db_path)
+    assert status["files"] == 1
+    assert ".tmp/*" in status["index_exclude_globs"]
 
 
 def test_operational_error_includes_rebuild_hint(
