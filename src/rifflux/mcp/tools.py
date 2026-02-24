@@ -331,9 +331,13 @@ def search_rifflux(
     query: str,
     top_k: int = 10,
     mode: str = "hybrid",
+    expand: bool = False,
 ) -> dict[str, Any]:
     t_start = time.perf_counter()
-    logger.debug("search_rifflux start query=%r top_k=%d mode=%s", query, top_k, mode)
+    logger.debug(
+        "search_rifflux start query=%r top_k=%d mode=%s expand=%s",
+        query, top_k, mode, expand,
+    )
     runtime_config = RiffluxConfig.from_env()
     try:
         # Initialise schema/connection first so the DB is ready before any
@@ -344,9 +348,7 @@ def search_rifflux(
         _maybe_start_file_watcher(db_path, runtime_config)
         try:
             results = search.search(query, top_k=top_k, mode=mode)
-            dt = time.perf_counter() - t_start
-            logger.debug("search_rifflux done in %.3fs count=%d", dt, len(results))
-            return {
+            response: dict[str, Any] = {
                 "query": query,
                 "mode": mode,
                 "count": len(results),
@@ -354,6 +356,13 @@ def search_rifflux(
                 "auto_reindex": auto_reindex,
                 "results": results,
             }
+            if expand and results:
+                related = search.expand(results)
+                response["related"] = related
+                response["related_count"] = len(related)
+            dt = time.perf_counter() - t_start
+            logger.debug("search_rifflux done in %.3fs count=%d", dt, len(results))
+            return response
         finally:
             store.close()
     except sqlite3.OperationalError as exc:
