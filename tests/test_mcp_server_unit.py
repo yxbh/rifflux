@@ -44,8 +44,9 @@ def test_create_server_tool_wrappers_delegate_to_mcp_tools(monkeypatch, tmp_path
         query: str,
         top_k: int = 10,
         mode: str = "hybrid",
+        expand: bool = False,
     ) -> dict:
-        calls["search"] = (db_path, query, top_k, mode)
+        calls["search"] = (db_path, query, top_k, mode, expand)
         return {"tool": "search"}
 
     def fake_get_chunk(db_path: Path | None, chunk_id: str) -> dict:
@@ -95,7 +96,7 @@ def test_create_server_tool_wrappers_delegate_to_mcp_tools(monkeypatch, tmp_path
             _call_tool,
             service,
             "search_rifflux",
-            {"query": "cache", "top_k": 3, "mode": "lexical"},
+            {"query": "cache", "top_k": 3, "mode": "lexical", "expand": True},
         )
     )
     chunk_result = anyio.run(partial(_call_tool, service, "get_chunk", {"chunk_id": "cid-1"}))
@@ -125,7 +126,7 @@ def test_create_server_tool_wrappers_delegate_to_mcp_tools(monkeypatch, tmp_path
     assert many_result == {"tool": "reindex_many"}
     assert single_result == {"tool": "reindex"}
 
-    assert calls["search"] == (db_path, "cache", 3, "lexical")
+    assert calls["search"] == (db_path, "cache", 3, "lexical", True)
     assert calls["chunk"] == (db_path, "cid-1")
     assert calls["file"] == (db_path, "notes.md")
     assert calls["status"] == db_path

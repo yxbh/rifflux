@@ -228,6 +228,39 @@ class SqliteStore:
             return None
         return {"path": path, "chunks": rows}
 
+    def get_sibling_chunks(
+        self,
+        file_path: str,
+        chunk_index: int,
+        window: int = 2,
+    ) -> list[dict[str, Any]]:
+        """Return chunks from the same file within ±window of chunk_index."""
+        cur = self.conn.execute(
+            """
+            SELECT c.chunk_id, f.path, c.heading_path, c.chunk_index, c.content
+            FROM chunks c
+            JOIN files f ON f.id = c.file_id
+            WHERE f.path = ?
+              AND c.chunk_index BETWEEN ? AND ?
+              AND c.chunk_index != ?
+            ORDER BY c.chunk_index ASC
+            """,
+            (file_path, chunk_index - window, chunk_index + window, chunk_index),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+    def get_embedding(self, chunk_id: str) -> np.ndarray | None:
+        """Return the stored embedding vector for a chunk, or None."""
+        cur = self.conn.execute(
+            "SELECT dim, vec FROM embeddings WHERE chunk_id = ?",
+            (chunk_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        dim = int(row["dim"])
+        return np.frombuffer(row["vec"], dtype=np.float32, count=dim).copy()
+
 
 def _normalize_fts_query(query: str) -> str | None:
     terms = [token for token in re.findall(r"\w+", query, flags=re.UNICODE) if token]

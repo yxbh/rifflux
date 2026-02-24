@@ -55,10 +55,27 @@ def create_server(db_path: Path | None = None) -> FastMCP:
             Literal["lexical", "semantic", "hybrid"],
             Field(description="Retrieval mode: lexical, semantic, or hybrid."),
         ] = "hybrid",
+        expand: Annotated[
+            bool,
+            Field(
+                description=(
+                    "When true, return a 'related' list of 2nd-degree chunks: "
+                    "sibling chunks from the same file and semantically similar "
+                    "chunks from other files."
+                ),
+            ),
+        ] = False,
     ) -> dict[str, Any]:
         """Search indexed content using lexical, semantic, or hybrid retrieval modes."""
         return await anyio.to_thread.run_sync(
-            partial(mcp_search_rifflux, resolved_db_path, query=query, top_k=top_k, mode=mode),
+            partial(
+                mcp_search_rifflux,
+                resolved_db_path,
+                query=query,
+                top_k=top_k,
+                mode=mode,
+                expand=expand,
+            ),
         )
 
     @mcp.tool()
