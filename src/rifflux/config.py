@@ -2,7 +2,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 DEFAULT_DB_PATH = Path(".tmp") / "rifflux" / "rifflux.db"
 
 

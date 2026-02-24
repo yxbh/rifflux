@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
-from fnmatch import fnmatch
 from collections.abc import Callable
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -50,8 +50,14 @@ class Indexer:
         seen_paths: list[str] = []
         root = root.resolve()
         source_root = root.parent if root.is_file() else root
-        file_candidates = [root] if root.is_file() else [path for path in root.rglob("*") if path.is_file()]
-        logger.debug("reindex_path root=%s candidates=%d force=%s", root, len(file_candidates), force)
+        file_candidates = (
+            [root] if root.is_file()
+            else [path for path in root.rglob("*") if path.is_file()]
+        )
+        logger.debug(
+            "reindex_path root=%s candidates=%d force=%s",
+            root, len(file_candidates), force,
+        )
 
         # Bulk-load existing file metadata to avoid per-file DB queries.
         file_meta_map = self.store.get_all_file_meta()
