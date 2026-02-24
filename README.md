@@ -65,7 +65,7 @@ Rifflux embedding behavior is controlled by `RIFFLUX_*` environment variables.
 - `RIFFLUX_AUTO_REINDEX_ON_SEARCH=0|1` (default `0`)
 - `RIFFLUX_AUTO_REINDEX_PATHS=.` (comma-separated paths)
 - `RIFFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS=2.0`
-- `RIFFLUX_FILE_WATCHER=0|1` (default `0`)
+- `RIFFLUX_FILE_WATCHER=0|1` (default `1`)
 - `RIFFLUX_FILE_WATCHER_PATHS=` (comma-separated directories to watch; required when watcher is enabled)
 - `RIFFLUX_FILE_WATCHER_DEBOUNCE_MS=500` (minimum ms between FS event batches)
 
@@ -82,7 +82,7 @@ Rifflux embedding behavior is controlled by `RIFFLUX_*` environment variables.
 | `RIFFLUX_AUTO_REINDEX_ON_SEARCH` | Whether search calls trigger incremental background refresh | `0` | `1` |
 | `RIFFLUX_AUTO_REINDEX_PATHS` | Paths scanned when auto-reindex on search is enabled | `.` | `docs,notes` |
 | `RIFFLUX_AUTO_REINDEX_MIN_INTERVAL_SECONDS` | Minimum seconds between auto-reindex runs per DB | `2.0` | `10.0` |
-| `RIFFLUX_FILE_WATCHER` | Whether filesystem watcher integration is enabled | `0` | `1` |
+| `RIFFLUX_FILE_WATCHER` | Whether filesystem watcher integration is enabled | `1` | `0` |
 | `RIFFLUX_FILE_WATCHER_PATHS` | Comma-separated directories monitored by watcher | empty | `docs,knowledge-base` |
 | `RIFFLUX_FILE_WATCHER_DEBOUNCE_MS` | Event debounce window before watcher emits a batch | `500` | `750` |
 | `RIFFLUX_LOG_LEVEL` | Logging verbosity for CLI and MCP server | `WARNING` | `DEBUG` |

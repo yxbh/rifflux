@@ -2,7 +2,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 DEFAULT_DB_PATH = Path(".tmp") / "rifflux" / "rifflux.db"
 
 
@@ -30,6 +29,8 @@ class RiffluxConfig:
     index_include_globs: tuple[str, ...] = ("*.md",)
     index_exclude_globs: tuple[str, ...] = (
         ".git/*",
+        ".tmp/*",
+        "**/.tmp/*",
         ".venv/*",
         "**/__pycache__/*",
         "**/.pytest_cache/*",
@@ -39,7 +40,7 @@ class RiffluxConfig:
     auto_reindex_on_search: bool = False
     auto_reindex_paths: tuple[str, ...] = (".",)
     auto_reindex_min_interval_seconds: float = 2.0
-    file_watcher_enabled: bool = False
+    file_watcher_enabled: bool = True
     file_watcher_paths: tuple[str, ...] = ()
     file_watcher_debounce_ms: int = 500
 
@@ -56,7 +57,7 @@ class RiffluxConfig:
         index_exclude_globs = _parse_glob_list(
             _env(
                 "INDEX_EXCLUDE_GLOBS",
-                ".git/*,.venv/*,**/__pycache__/*,**/.pytest_cache/*,**/.ruff_cache/*,**/node_modules/*",
+                ".git/*,.tmp/*,**/.tmp/*,.venv/*,**/__pycache__/*,**/.pytest_cache/*,**/.ruff_cache/*,**/node_modules/*",
             )
         )
         auto_reindex_on_search = _parse_bool(
@@ -69,7 +70,7 @@ class RiffluxConfig:
             _env("AUTO_REINDEX_MIN_INTERVAL_SECONDS", "2.0")
         )
         file_watcher_enabled = _parse_bool(
-            _env("FILE_WATCHER", "0")
+            _env("FILE_WATCHER", "1")
         )
         file_watcher_paths = _parse_glob_list(
             _env("FILE_WATCHER_PATHS", "")

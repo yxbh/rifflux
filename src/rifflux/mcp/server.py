@@ -14,10 +14,20 @@ from pydantic import Field
 from rifflux.config import RiffluxConfig
 from rifflux.mcp.tools import (
     get_chunk as mcp_get_chunk,
+)
+from rifflux.mcp.tools import (
     get_file as mcp_get_file,
+)
+from rifflux.mcp.tools import (
     index_status as mcp_index_status,
+)
+from rifflux.mcp.tools import (
     reindex as mcp_reindex,
+)
+from rifflux.mcp.tools import (
     reindex_many as mcp_reindex_many,
+)
+from rifflux.mcp.tools import (
     search_rifflux as mcp_search_rifflux,
 )
 
@@ -67,10 +77,10 @@ def create_server(db_path: Path | None = None) -> FastMCP:
     async def get_file(
         path: Annotated[
             str,
-            Field(description="Source file path to retrieve from the index."),
+            Field(description="Absolute source file path to retrieve from the index."),
         ]
     ) -> dict[str, Any]:
-        """Get all indexed chunks and metadata for a specific source file path."""
+        """Get all indexed chunks and metadata for a specific absolute source file path."""
         return await anyio.to_thread.run_sync(
             partial(mcp_get_file, resolved_db_path, path=path),
         )

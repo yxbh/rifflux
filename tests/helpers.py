@@ -20,7 +20,7 @@ EXPECTED_MCP_TOOL_DESCRIPTIONS = {
         "Get one indexed chunk by stable chunk ID, including metadata and content."
     ),
     "get_file": (
-        "Get all indexed chunks and metadata for a specific source file path."
+        "Get all indexed chunks and metadata for a specific absolute source file path."
     ),
     "index_status": (
         "Report current index counts and embedding backend/model configuration."
@@ -38,7 +38,7 @@ EXPECTED_MCP_TOOL_PARAM_DESCRIPTIONS = {
         "chunk_id": "Stable chunk identifier returned by search results.",
     },
     "get_file": {
-        "path": "Source file path to retrieve from the index.",
+        "path": "Absolute source file path to retrieve from the index.",
     },
     "index_status": {},
     "reindex": {
